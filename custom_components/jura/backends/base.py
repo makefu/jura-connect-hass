@@ -25,6 +25,12 @@ class MachineSnapshot:
     counters: dict[str, int] = field(default_factory=dict)
     percents: dict[str, int] = field(default_factory=dict)
     raw_status_hex: str = ""
+    # jura_connect 0.7+ splits the active alerts by severity (lifted
+    # from the per-machine ALERT.Type XML attribute). Surface them so
+    # entities can drive state and grouping off the cleaner split.
+    errors: tuple[str, ...] = field(default_factory=tuple)
+    info: tuple[str, ...] = field(default_factory=tuple)
+    process: tuple[str, ...] = field(default_factory=tuple)
     # Per-product brew counts. ``brews`` is keyed by product name (e.g.
     # "espresso"); ``brews_total`` is the global counter from slot 0.
     # Empty dict if the machine doesn't support the @TR:32 statistics
@@ -37,6 +43,12 @@ class MachineSnapshot:
     # ("S8 (EB)"). Both are ``None`` when the user picked the baseline.
     machine_type: str | None = None
     machine_type_name: str | None = None
+    # Current value of each machine setting, keyed by setting name.
+    # The value is the raw hex string read from the wire — entities
+    # decode it back to a friendly name via the profile's SettingDef.
+    # Empty if no profile is configured or the machine doesn't expose
+    # the requested setting.
+    settings: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -86,3 +98,12 @@ class JuraBackend(ABC):
         allow_destructive: bool = False,
     ) -> dict[str, Any]:
         """Dispatch a named command from the library's registry."""
+
+    @abstractmethod
+    async def write_setting(self, name: str, value: str) -> None:
+        """Write one machine setting by snake_case name + user-facing value.
+
+        Implementations are responsible for validating ``value`` against
+        the active machine profile and translating to the wire-format
+        hex string.
+        """

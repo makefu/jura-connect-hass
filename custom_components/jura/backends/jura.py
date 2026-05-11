@@ -140,6 +140,16 @@ class JuraConnectBackend(JuraBackend):
                     _LOGGER.debug("product counters unavailable: %s", err)
                     brews_total = 0
                     brews = {}
+                # Settings (per profile). Each read is one extra round
+                # trip — 7 settings on EF1091 add ~350ms. Skip cleanly
+                # when no profile is configured.
+                settings_values: dict[str, str] = {}
+                if self._profile and self._profile.settings:
+                    for setting in self._profile.settings:
+                        try:
+                            settings_values[setting.name] = client.read_setting(setting.p_argument)
+                        except Exception as err:  # noqa: BLE001
+                            _LOGGER.debug("setting %s unavailable: %s", setting.name, err)
             except HandshakeError as err:
                 raise JuraAuthError(str(err)) from err
             except OSError as err:
@@ -151,6 +161,9 @@ class JuraConnectBackend(JuraBackend):
                 conn_id=info.conn_id,
                 handshake_state=info.handshake_state,
                 active_alerts=info.status.active_alerts,
+                errors=info.status.errors,
+                info=info.status.info,
+                process=info.status.process,
                 counters={
                     "cleaning": info.maintenance_counters.cleaning,
                     "filter_change": info.maintenance_counters.filter_change,
@@ -169,6 +182,7 @@ class JuraConnectBackend(JuraBackend):
                 brews_total=brews_total,
                 machine_type=self.machine_type,
                 machine_type_name=self._machine_type_name,
+                settings=settings_values,
             )
 
         return await asyncio.to_thread(_do)
@@ -178,6 +192,36 @@ class JuraConnectBackend(JuraBackend):
 
     async def unlock(self) -> None:
         await self.run_named("unlock")
+
+    async def write_setting(self, name: str, value: str) -> None:
+        """Validate ``value`` against the profile and write it.
+
+        Raises :class:`JuraBackendError` if no profile is loaded (we
+        can't validate without one) or :class:`ValueError` if the
+        value is rejected by ``SettingDef.normalise_value``.
+        """
+        if self._profile is None:
+            raise JuraBackendError("no machine profile loaded; cannot write settings")
+        setting = self._profile.setting_by_name.get(name)
+        if setting is None:
+            raise JuraBackendError(f"setting {name!r} not in profile {self._profile.code}")
+        wire_value = setting.normalise_value(value)
+
+        def _do() -> None:
+            client = self._make_client()
+            try:
+                handshake = client.connect()
+                if handshake.state != "CORRECT":
+                    raise JuraAuthError(f"handshake state {handshake.state}")
+                client.write_setting(setting.p_argument, wire_value)
+            except HandshakeError as err:
+                raise JuraAuthError(str(err)) from err
+            except OSError as err:
+                raise JuraBackendError(f"I/O error talking to machine: {err}") from err
+            finally:
+                client.close()
+
+        await asyncio.to_thread(_do)
 
     async def run_named(
         self,

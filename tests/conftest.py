@@ -31,6 +31,8 @@ def _make_module(name: str, **attrs: object) -> ModuleType:
 class Platform:
     SENSOR = "sensor"
     BINARY_SENSOR = "binary_sensor"
+    SELECT = "select"
+    NUMBER = "number"
 
 
 class EntityCategory(str, Enum):
@@ -305,6 +307,62 @@ _make_module(
 )
 
 
+# --- homeassistant.components.select ---
+class SelectEntity:
+    @property
+    def unique_id(self):
+        return getattr(self, "_attr_unique_id", None)
+
+    @property
+    def name(self):
+        return getattr(self, "_attr_name", None)
+
+    @property
+    def options(self):
+        return getattr(self, "_attr_options", [])
+
+    @property
+    def entity_category(self):
+        return getattr(self, "_attr_entity_category", None)
+
+
+_make_module("homeassistant.components.select", SelectEntity=SelectEntity)
+
+
+# --- homeassistant.components.number ---
+class NumberEntity:
+    @property
+    def unique_id(self):
+        return getattr(self, "_attr_unique_id", None)
+
+    @property
+    def name(self):
+        return getattr(self, "_attr_name", None)
+
+    @property
+    def native_min_value(self):
+        return getattr(self, "_attr_native_min_value", None)
+
+    @property
+    def native_max_value(self):
+        return getattr(self, "_attr_native_max_value", None)
+
+    @property
+    def native_step(self):
+        return getattr(self, "_attr_native_step", None)
+
+    @property
+    def mode(self):
+        return getattr(self, "_attr_mode", None)
+
+    @property
+    def entity_category(self):
+        return getattr(self, "_attr_entity_category", None)
+
+
+_make_module("homeassistant.components.number", NumberEntity=NumberEntity)
+
+
 # --- homeassistant.components.binary_sensor ---
 class BinarySensorEntity:
     @property
@@ -386,6 +444,13 @@ def sample_snapshot() -> MachineSnapshot:
         brews_total=809,
         machine_type="EF1091",
         machine_type_name="S8 (EB)",
+        errors=(),
+        info=("heating_up",),
+        process=(),
+        settings={
+            "hardness": "10",
+            "language": "02",
+        },
     )
 
 

@@ -22,7 +22,7 @@ except ImportError:
 
 
 if _HAS_HOMEASSISTANT:
-    PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR]
+    PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SELECT, Platform.NUMBER]
 
     SERVICE_FORCE_UPDATE = "force_update"
     SERVICE_LOCK_SCREEN = "lock_screen"

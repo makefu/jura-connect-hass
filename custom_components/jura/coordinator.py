@@ -92,3 +92,14 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
 
         await self.async_request_refresh()
         return result
+
+    async def write_setting(self, name: str, value: str) -> None:
+        """Write a machine setting (validated by the profile), then refresh."""
+        try:
+            await self.backend.write_setting(name, value)
+        except JuraAuthError as err:
+            raise ConfigEntryAuthFailed(f"authentication failed: {err}") from err
+        except JuraBackendError as err:
+            raise UpdateFailed(f"backend error: {err}") from err
+
+        await self.async_request_refresh()

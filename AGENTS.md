@@ -1,20 +1,23 @@
 # Agent Development Guide
 
-Home Assistant custom component for JURA coffee machines, talking to the WiFi
-dongle over TCP/51515 via the reverse-engineered
-[`jura-connect`](https://github.com/makefu/jura-connect) library.
+**Jura Connect** — Home Assistant custom component for JURA coffee
+machines, talking to the WiFi dongle over TCP/51515 via the
+reverse-engineered [`jura-connect`](https://github.com/makefu/jura-connect)
+library.
 
 ## Project Structure
 
 ```
 custom_components/jura/
   __init__.py          # Integration setup, service registration
-  config_flow.py       # HA config flow: discovery → manual → pair
-  const.py             # Domain, config keys, alert/counter/percent maps
-  coordinator.py       # JuraCoordinator (polling + command dispatch)
-  entity.py            # JuraEntity base (DeviceInfo + has_entity_name)
-  sensor.py            # State sensor + maintenance counter/percent sensors
-  binary_sensor.py     # One BinarySensorEntity per well-known alert
+  config_flow.py       # HA config flow: user choice -> discovery|manual -> pair -> machine_type
+  const.py             # Domain, config keys, alert/counter/percent/setting maps
+  coordinator.py       # JuraCoordinator (polling + command + write_setting dispatch)
+  entity.py            # JuraEntity base (DeviceInfo + available override)
+  sensor.py            # Status/brew/counter/percent/machine-type/setting-value sensors
+  binary_sensor.py     # Per-alert + connectivity binary sensors
+  select.py            # Writable setting entities (switch/combobox/item_slider)
+  number.py            # Writable setting entities (step_slider — hardness etc.)
   serializers.py       # MachineSnapshot -> JSON-safe dict helpers
   cli.py               # Standalone CLI (just --version + discover)
   services.yaml        # HA service definitions
@@ -94,7 +97,7 @@ pueue follow <task-id> | tail -n 20
 After building, verify the CLI:
 
 ```sh
-./result/bin/jura-ha --version
+./result/bin/jura-connect-ha --version
 ```
 
 ## Versioning

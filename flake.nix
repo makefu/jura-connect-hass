@@ -24,7 +24,7 @@
       packages = forAllSystems (
         pkgs: system: {
           default = pkgs.python313Packages.buildPythonApplication {
-            pname = "ha-jura";
+            pname = "ha-jura-connect";
             inherit version;
             src = ./.;
             format = "pyproject";
@@ -37,10 +37,10 @@
 
             doInstallCheck = true;
             installCheckPhase = ''
-              $out/bin/jura-ha --version | grep -q "${version}"
+              $out/bin/jura-connect-ha --version | grep -q "${version}"
             '';
 
-            meta.mainProgram = "jura-ha";
+            meta.mainProgram = "jura-connect-ha";
 
             passthru = {
               isHomeAssistantComponent = true;

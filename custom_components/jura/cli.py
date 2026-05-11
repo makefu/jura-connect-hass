@@ -25,7 +25,7 @@ def _read_version() -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="jura-ha", description="Jura HA helper CLI")
+    parser = argparse.ArgumentParser(prog="jura-connect-ha", description="Jura Connect HA helper CLI")
     parser.add_argument("--version", action="store_true", help="print the integration version and exit")
     sub = parser.add_subparsers(dest="cmd")
     sub.add_parser("discover", help="list reachable Jura machines (UDP + TCP sweep)")

@@ -1,6 +1,6 @@
 { pkgs, juraConnectPkg, ... }:
 pkgs.testers.nixosTest {
-  name = "jura-ha-integration";
+  name = "jura-connect-ha-integration";
 
   nodes.machine =
     { pkgs, ... }:
@@ -15,8 +15,8 @@ pkgs.testers.nixosTest {
         };
         customComponents = [
           (pkgs.stdenvNoCC.mkDerivation {
-            pname = "ha-jura";
-            version = "0.6.0";
+            pname = "ha-jura-connect";
+            version = "0.7.0";
             src = ../.;
             installPhase = ''
               mkdir -p $out/custom_components

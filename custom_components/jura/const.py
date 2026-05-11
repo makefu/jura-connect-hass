@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 DOMAIN = "jura"
-NAME = "Jura Coffee"
+NAME = "Jura Connect"
 
 CONF_HOST = "host"
 CONF_PORT = "port"

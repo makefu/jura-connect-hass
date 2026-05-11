@@ -1,4 +1,4 @@
-# Jura Coffee — Home Assistant Custom Component
+# Jura Connect — Home Assistant Integration
 
 [![CI](https://github.com/makefu/jura-connect-hass/actions/workflows/ci.yml/badge.svg)](https://github.com/makefu/jura-connect-hass/actions/workflows/ci.yml)
 [![hacs_custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz/docs/faq/custom_repositories)
@@ -9,68 +9,74 @@ TT237W series). Built on the reverse-engineered
 directly to the machine's WiFi dongle on TCP/51515. No cloud, no vendor
 account.
 
+Requires `jura_connect>=0.9.1`. The integration ships the Python dependency
+declaration; Nix users get it pinned via the flake input.
+
 ## Features
 
-- Automatic discovery of machines on the local network (UDP broadcast + TCP
-  fallback for firmwares like TT237W that don't reply to UDP)
-- One-shot pairing with the physical machine (press OK once, store the
-  auth-hash, reconnect silently afterwards)
-- Sensors:
-  - **State** — overall machine state derived from the active-alert bits
-  - **Machine type** — the EF code + friendly name (e.g. `S8 (EB)` with
-    `machine_type=EF1091` as attribute), set during config flow
-  - **Maintenance counters** — cleaning / filter / decalc / cappu-rinse /
-    coffee-rinse / cappu-clean
-  - **Maintenance percent** — cleaning / filter / decalc (0–100 % or
-    unavailable when the indicator is absent)
-  - **Brew counters** — one sensor per recipe the machine reports
-    (espresso, coffee, cappuccino, …) plus a *Total brews* sensor. The
-    set of recipes is read from the machine's own product table; names
-    come from the per-machine profile when configured.
-- Binary sensors for every well-known alert (water low, beans empty, drip
-  tray, milk warning, …) plus a `connectivity` binary sensor that reports
-  whether the last poll succeeded
-- Entities keep showing their last value when the machine is offline — use
-  the `connectivity` binary sensor (or the standard
-  `homeassistant.update_entity` failure) to gate automations on actual
-  reachability
-- Services for everything the library supports safely: lock/unlock screen,
-  brew a recipe, run cleaning / descaling / filter-change / cappu-rinse /
-  cappu-clean cycles, power off, restart the dongle
+### Setup
 
-Destructive operations like `reset-counters`, `set-pin`, `set-ssid`, and
-`set-password` are *not* exposed in v1 — they can lock you out of the machine
-until a factory reset. Use the upstream `jura-connect` CLI if you need them.
+- **Auto-discovery** on the local network (UDP broadcast first, with a TCP
+  /24 fallback for firmwares like TT237W that don't reply to UDP); manual IP
+  entry is always available.
+- **One-shot pairing** — press OK on the machine once, the integration
+  persists the resulting auth-hash on the config entry and reconnects
+  silently afterwards.
+- **Per-machine profiles** — pick your model from a dropdown of 88 known
+  JURA variants (S8 EB, ENA 8, Z8, …). The profile drives the names of
+  alerts, brew counters, and machine settings. Auto-detected from the UDP
+  broadcast's article number when available.
 
-## Installation
+### Sensors (main device-card section)
 
-### HACS (recommended)
+- **Status** — overall machine state derived from the active-alert bits.
+- **Brew `<recipe>`** — one sensor per recipe the machine reports
+  (espresso, coffee, cappuccino, macchiato, americano, …). Set is
+  discovered from the machine; names from the profile when configured.
+- **Brew total** — lifetime brews across all recipes.
+- **Service `<kind>` level** — `cleaning`, `decalc`, `filter change` —
+  the percent-to-next-service indicators (0–100 %).
+- **Setting `<name>`** — current value of each machine setting (language,
+  hardness, auto-off, units, …); item-driven settings surface as the
+  friendly catalogue name, sliders as the integer value.
 
-1. In HACS → Integrations → ⋮ → **Custom repositories**, add
-   `https://github.com/makefu/jura-connect-hass` as type *Integration*.
-2. Install **Jura Coffee** from the list.
-3. Restart Home Assistant.
+### Binary sensors
 
-### Manual
+- **Alert `<name>`** — one entity per status bit (`fill water`, `no beans`,
+  `empty grounds`, drip tray, milk warning, heating up, coffee ready, …).
+  Problem-class alerts live in the main view; running and informational
+  bits move to the diagnostic section.
 
-Copy `custom_components/jura/` into your Home Assistant `config/custom_components/`
-directory and restart.
+### Configuration controls (CONFIG section)
 
-## Configuration
+- **`select.*`** entities for switch / combobox / item-slider settings
+  (language, units, auto-off delay, milk rinsing, frother instructions, …).
+  Writes are validated against the profile before any TCP session opens, so
+  invalid values surface a clear "klingon is not a recognised value.
+  Allowed: german=01, english=02, …" message rather than a backend error.
+- **`number.*`** entities for step-slider settings (currently water
+  hardness on EF1091) with the min/max/step pulled from the profile XML.
 
-1. Settings → Devices & Services → **Add Integration** → *Jura Coffee*.
-2. Pick your machine from the discovered list, or choose *Enter manually* and
-   type the IP.
-3. When prompted, **press OK on the coffee machine** to accept the pairing.
-   The integration stores the resulting auth-hash on the config entry; you
-   only do this once per machine.
-4. Pick your machine model from the dropdown. The list comes from the 88
-   machine profiles bundled with `jura-connect`. Auto-detection pre-selects
-   the right model when the WiFi dongle replies to UDP discovery; otherwise
-   choose your model (e.g. `S8 (EB) [EF1091]`) or stick with *Use baseline
-   (no profile)* for a generic EF536 fallback.
+### Diagnostics (collapsed by default)
 
-## Services
+- **Machine type** — the EF code + friendly name (e.g. `S8 (EB)` with
+  `machine_type=EF1091` on attributes).
+- **Connectivity** — the canonical "is the machine reachable right now"
+  signal (`binary_sensor` with `device_class=connectivity`). Wire
+  automations against this rather than the per-entity `available` flag.
+- **Cycles `<kind>`** — the six maintenance counters (cleaning, decalc,
+  filter change, cappu rinse, coffee rinse, cappu clean).
+- Running / informational binary sensors (heating up, coffee ready,
+  welcome, please wait, …).
+
+### Resilience
+
+Entities keep showing their last value when the machine is offline — JURA
+dongles sleep regularly and v0.1 caused dashboards to flash with every
+failed poll. The connectivity binary sensor is the single source of truth
+for reachability.
+
+### Services
 
 | Service                | Description                                           |
 | ---------------------- | ----------------------------------------------------- |
@@ -83,30 +89,105 @@ directory and restart.
 | `jura.filter_change`   | Run water-filter change procedure                     |
 | `jura.cappu_rinse`     | Rinse the milk system                                 |
 | `jura.cappu_clean`     | Clean the milk system (requires cleaning tablet)      |
-| `jura.power_off`       | Put the machine into standby                          |
+| `jura.power_off`       | Put the machine into standby (TT237W ignores this)    |
 | `jura.restart`         | Reboot the WiFi dongle                                |
 
-All commands accept `entity_id` (any Jura entity) or `config_entry_id` to
-target a specific machine.
+All services accept `entity_id` (any Jura entity) or `config_entry_id` to
+target a specific machine. Brewing returns the raw command result as the
+service response.
 
-### Example automation
+Destructive registry entries that can lock you out of the machine
+(`reset-counters`, `set-pin`, `set-ssid`, `set-password`, `raw`) are
+deliberately **not** exposed as HA services. Use the upstream
+`jura-connect` CLI if you need them.
+
+## Installation
+
+### HACS (recommended)
+
+1. In HACS → Integrations → ⋮ → **Custom repositories**, add
+   `https://github.com/makefu/jura-connect-hass` as type *Integration*.
+2. Install **Jura Connect** from the list.
+3. Restart Home Assistant.
+
+### Manual
+
+Copy `custom_components/jura/` into your Home Assistant
+`config/custom_components/` directory and restart.
+
+## Configuration
+
+1. Settings → Devices & Services → **Add Integration** → *Jura Connect*.
+2. Choose **Search for machines on the network** (recommended) or
+   **Enter the IP address manually**. Discovery shows a progress
+   spinner; empty results route to manual entry.
+3. When prompted, **press OK on the coffee machine** to accept the pairing.
+   The pairing dialog shows a spinner with a timeout of 60 seconds. The
+   resulting auth-hash is persisted to the config entry; subsequent
+   reconnects skip the on-machine confirmation.
+4. Pick your **machine model** from the dropdown. Auto-detection
+   pre-selects the right entry when the WiFi dongle replied to UDP
+   discovery (the broadcast carries the article number, which maps to an
+   EF code via the bundled catalogue). Otherwise choose your model — for
+   example `S8 (EB) [EF1091]` — or pick *Use baseline (no profile)* for
+   a generic EF536 fallback. Models without a profile won't get
+   per-recipe brew counters or machine-setting entities.
+
+## Example automations
+
+### Wake me up with espresso (gated on reachability and water)
 
 ```yaml
-alias: "Morning espresso"
+alias: Morning espresso
 trigger:
   - platform: time
     at: "07:00:00"
 condition:
   - condition: state
-    entity_id: binary_sensor.jura_192_0_2_10_fill_water
+    entity_id: binary_sensor.jura_connectivity
+    state: "on"
+  - condition: state
+    entity_id: binary_sensor.jura_alert_fill_water
     state: "off"
 action:
   - service: jura.brew
     target:
-      entity_id: sensor.jura_192_0_2_10_state
+      entity_id: sensor.jura_status
     data:
       recipe: "01"
 ```
+
+### Notify when cleaning is due
+
+```yaml
+alias: Coffee machine needs cleaning
+trigger:
+  - platform: numeric_state
+    entity_id: sensor.jura_service_cleaning_level
+    above: 95
+action:
+  - service: notify.mobile_app
+    data:
+      message: "Cleaning cycle due — service level {{ states('sensor.jura_service_cleaning_level') }}%"
+```
+
+### Reduce auto-off delay at night
+
+```yaml
+alias: Power-saving overnight
+trigger:
+  - platform: time
+    at: "22:00:00"
+action:
+  - service: select.select_option
+    target:
+      entity_id: select.jura_setting_auto_off
+    data:
+      option: "15min"
+```
+
+(Exact entity_id slugs depend on your machine's host / conn-id — check
+the device page after setup.)
 
 ## Development
 
@@ -116,11 +197,14 @@ See [AGENTS.md](AGENTS.md) for the full development guide. TL;DR:
 nix develop -c pytest tests/ -v
 nix develop -c ruff check
 nix build
+./result/bin/jura-connect-ha --version
 ```
 
 ## Acknowledgements
 
-- [`jura-connect`](https://github.com/makefu/jura-connect) — the reverse-
-  engineered protocol library this integration wraps.
-- The J.O.E. (Jura Operating Experience) Android app, from which the WiFi
-  protocol was originally derived.
+- [`jura-connect`](https://github.com/makefu/jura-connect) — the
+  reverse-engineered protocol library this integration wraps. Most of
+  the heavy lifting (handshake, status decoding, command registry,
+  per-machine XML catalogue) lives upstream.
+- The J.O.E. (Jura Operating Experience) Android app, from which the
+  WiFi protocol was originally derived.

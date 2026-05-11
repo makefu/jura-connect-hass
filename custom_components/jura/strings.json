@@ -2,7 +2,7 @@
     "config": {
         "step": {
             "user": {
-                "title": "Set up Jura Coffee",
+                "title": "Set up Jura Connect",
                 "description": "How would you like to find your coffee machine?",
                 "data": {
                     "mode": "Setup method"

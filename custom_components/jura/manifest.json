@@ -1,6 +1,6 @@
 {
     "domain": "jura",
-    "name": "Jura Coffee",
+    "name": "Jura Connect",
     "codeowners": ["@makefu"],
     "config_flow": true,
     "dependencies": [],
@@ -9,5 +9,5 @@
     "iot_class": "local_polling",
     "issue_tracker": "https://github.com/makefu/jura-connect-hass/issues",
     "requirements": ["jura_connect>=0.9.1"],
-    "version": "0.6.0"
+    "version": "0.7.0"
 }

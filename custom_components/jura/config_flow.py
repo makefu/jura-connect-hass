@@ -24,15 +24,17 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 
 from .backends.base import DiscoveredMachine, JuraAuthError, JuraBackendError
-from .backends.jura import JuraConnectBackend, discover_machines
+from .backends.jura import JuraConnectBackend, discover_machines, machine_type_from_article
 from .const import (
     CONF_AUTH_HASH,
     CONF_CONN_ID,
     CONF_HOST,
+    CONF_MACHINE_TYPE,
     CONF_PIN,
     CONF_PORT,
     DEFAULT_PORT,
     DOMAIN,
+    MACHINE_TYPE_NONE,
     SELECTION_MANUAL,
 )
 
@@ -49,7 +51,10 @@ def _default_conn_id() -> str:
 class JuraConfigFlow(ConfigFlow, domain=DOMAIN):
     """UI-driven setup for one Jura machine."""
 
-    VERSION = 1
+    # Bumped to 2 in v0.3.0: config entries gained a machine_type field
+    # and there's deliberately no migration path — old entries will fail
+    # to load and prompt the user to re-add.
+    VERSION = 2
 
     def __init__(self) -> None:
         self._discovered: list[DiscoveredMachine] = []
@@ -59,6 +64,7 @@ class JuraConfigFlow(ConfigFlow, domain=DOMAIN):
         self._last_error_message: str = ""
         self._last_error_code: str = "unknown"
         self._auth_hash: str = ""
+        self._auto_machine_type: str | None = None
 
     # ------------------------------------------------------------------ #
     # Step 1: choose discovery vs manual
@@ -133,6 +139,10 @@ class JuraConfigFlow(ConfigFlow, domain=DOMAIN):
                         CONF_PIN: "",
                         CONF_CONN_ID: _default_conn_id(),
                     }
+                    # Best-effort: derive the EF code from the discovery
+                    # broadcast's article number so the machine_type
+                    # step can default to the right value.
+                    self._auto_machine_type = machine_type_from_article(machine.article_number)
                     return await self.async_step_pair_progress()
             return await self.async_step_manual()
 
@@ -203,7 +213,7 @@ class JuraConfigFlow(ConfigFlow, domain=DOMAIN):
             self._last_error_message = "pairing returned no auth hash"
             return self.async_show_progress_done(next_step_id="pair_failed")
         self._auth_hash = new_hash
-        return self.async_show_progress_done(next_step_id="finish")
+        return self.async_show_progress_done(next_step_id="machine_type")
 
     def _classify_pair_error(self, err: BaseException) -> None:
         """Map the backend exception to a user-facing error code + message.
@@ -243,6 +253,34 @@ class JuraConfigFlow(ConfigFlow, domain=DOMAIN):
             description_placeholders={
                 "error": self._last_error_message or "(no details)",
                 "host": self._connection.get(CONF_HOST, "?"),
+            },
+        )
+
+    async def async_step_machine_type(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Ask the user to pick a machine variant (or accept the auto-detected one)."""
+        from jura_connect import known_machine_names
+
+        if user_input is not None:
+            choice = user_input[CONF_MACHINE_TYPE]
+            self._connection[CONF_MACHINE_TYPE] = None if choice == MACHINE_TYPE_NONE else choice
+            return await self.async_step_finish()
+
+        options: dict[str, str] = {MACHINE_TYPE_NONE: "Use baseline (no profile)"}
+        for friendly, code in known_machine_names():
+            options[code] = f"{friendly} [{code}]"
+
+        default = self._auto_machine_type if self._auto_machine_type in options else MACHINE_TYPE_NONE
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_MACHINE_TYPE, default=default): vol.In(options),
+            }
+        )
+        return self.async_show_form(
+            step_id="machine_type",
+            data_schema=schema,
+            description_placeholders={
+                "detected": self._auto_machine_type or "none",
             },
         )
 

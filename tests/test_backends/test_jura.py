@@ -53,6 +53,42 @@ async def test_fetch_round_trip(running_simulator):
     assert snapshot.percents["decalc"] == 0x1E
 
 
+async def test_fetch_includes_brews_and_machine_type(running_simulator):
+    """Simulator returns Kaffeebert's realistic product counter table."""
+    host, port = running_simulator.address
+    backend = JuraConnectBackend(
+        host,
+        port,
+        conn_id="ha-test",
+        machine_type="EF1091",
+    )
+    await backend.pair()
+
+    snapshot = await backend.fetch()
+
+    assert snapshot.brews_total == 3229
+    # The EF1091 profile names slot 0x02 as "espresso"
+    assert snapshot.brews.get("espresso") == 78
+    assert snapshot.brews.get("coffee") == 595
+    # Machine-type fields are populated from the EF code
+    assert snapshot.machine_type == "EF1091"
+    assert snapshot.machine_type_name  # friendly name resolved
+
+
+async def test_fetch_without_machine_type_still_succeeds(running_simulator):
+    """No EF code => baseline behavior, machine_type fields are None."""
+    host, port = running_simulator.address
+    backend = JuraConnectBackend(host, port, conn_id="ha-test")
+    await backend.pair()
+
+    snapshot = await backend.fetch()
+
+    assert snapshot.machine_type is None
+    assert snapshot.machine_type_name is None
+    # Brews still come back; names use the EF536 baseline map.
+    assert snapshot.brews_total == 3229
+
+
 async def test_lock_unlock_round_trip(running_simulator):
     host, port = running_simulator.address
     backend = JuraConnectBackend(host, port, conn_id="ha-test")

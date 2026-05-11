@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest.mock import MagicMock
 
 from custom_components.jura.const import COUNTER_KEYS, PERCENT_KEYS, STATE_IDLE
-from custom_components.jura.sensor import CounterSensor, PercentSensor, StateSensor
+from custom_components.jura.sensor import (
+    BrewCounterSensor,
+    BrewTotalSensor,
+    CounterSensor,
+    MachineTypeSensor,
+    PercentSensor,
+    StateSensor,
+)
 
 
 def _make_coordinator(snapshot):
@@ -75,3 +83,70 @@ def test_percent_sensor_full_set(sample_snapshot, fake_config_entry):
         s = PercentSensor(coordinator, fake_config_entry, key)
         assert s.unique_id.endswith(f"percent_{key}")
         assert s.native_unit_of_measurement == "%"
+
+
+# ---------------------------------------------------------------------------
+# Brew counters
+# ---------------------------------------------------------------------------
+
+
+def test_brew_counter_reports_per_product_count(sample_snapshot, fake_config_entry):
+    coordinator = _make_coordinator(sample_snapshot)
+    espresso = BrewCounterSensor(coordinator, fake_config_entry, "espresso")
+    coffee = BrewCounterSensor(coordinator, fake_config_entry, "coffee")
+    assert espresso.native_value == 412
+    assert coffee.native_value == 287
+    assert espresso.unique_id.endswith("brews_espresso")
+    assert espresso.native_unit_of_measurement == "brews"
+
+
+def test_brew_counter_none_for_unknown_product(sample_snapshot, fake_config_entry):
+    coordinator = _make_coordinator(sample_snapshot)
+    s = BrewCounterSensor(coordinator, fake_config_entry, "ristretto")
+    assert s.native_value is None
+
+
+def test_brew_counter_none_without_data(fake_config_entry):
+    s = BrewCounterSensor(_make_coordinator(None), fake_config_entry, "espresso")
+    assert s.native_value is None
+
+
+def test_brew_total_sensor_reports_total(sample_snapshot, fake_config_entry):
+    s = BrewTotalSensor(_make_coordinator(sample_snapshot), fake_config_entry)
+    assert s.native_value == 809
+    assert s.unique_id.endswith("brews_total")
+
+
+def test_brew_total_zero_on_machines_without_statistics(empty_snapshot, fake_config_entry):
+    s = BrewTotalSensor(_make_coordinator(empty_snapshot), fake_config_entry)
+    assert s.native_value == 0
+
+
+# ---------------------------------------------------------------------------
+# Machine type
+# ---------------------------------------------------------------------------
+
+
+def test_machine_type_sensor_shows_friendly_name(sample_snapshot, fake_config_entry):
+    s = MachineTypeSensor(_make_coordinator(sample_snapshot), fake_config_entry)
+    assert s.native_value == "S8 (EB)"
+    attrs = s.extra_state_attributes
+    assert attrs["machine_type"] == "EF1091"
+    assert attrs["machine_type_name"] == "S8 (EB)"
+
+
+def test_machine_type_sensor_falls_back_to_code_without_friendly(sample_snapshot, fake_config_entry):
+    snap = replace(sample_snapshot, machine_type_name=None)
+    s = MachineTypeSensor(_make_coordinator(snap), fake_config_entry)
+    assert s.native_value == "EF1091"
+
+
+def test_machine_type_sensor_shows_unconfigured_when_unset(empty_snapshot, fake_config_entry):
+    s = MachineTypeSensor(_make_coordinator(empty_snapshot), fake_config_entry)
+    assert s.native_value == "unconfigured"
+
+
+def test_machine_type_sensor_none_without_data(fake_config_entry):
+    s = MachineTypeSensor(_make_coordinator(None), fake_config_entry)
+    assert s.native_value is None
+    assert s.extra_state_attributes == {}

@@ -337,6 +337,7 @@ from custom_components.jura.const import (  # noqa: E402
     CONF_AUTH_HASH,
     CONF_CONN_ID,
     CONF_HOST,
+    CONF_MACHINE_TYPE,
     CONF_PIN,
     CONF_PORT,
 )
@@ -363,6 +364,15 @@ def sample_snapshot() -> MachineSnapshot:
             "decalc": 30,
         },
         raw_status_hex="0010000000000000",
+        brews={
+            "espresso": 412,
+            "coffee": 287,
+            "cappuccino": 96,
+            "macchiato": 14,
+        },
+        brews_total=809,
+        machine_type="EF1091",
+        machine_type_name="S8 (EB)",
     )
 
 
@@ -379,6 +389,10 @@ def empty_snapshot() -> MachineSnapshot:
         ),
         percents={"cleaning": 100, "filter_change": 100, "decalc": 100},
         raw_status_hex="0000000000000000",
+        brews={},
+        brews_total=0,
+        machine_type=None,
+        machine_type_name=None,
     )
 
 
@@ -401,6 +415,7 @@ def config_entry_data() -> dict:
         CONF_PIN: "",
         CONF_CONN_ID: "homeassistant-test",
         CONF_AUTH_HASH: "a" * 64,
+        CONF_MACHINE_TYPE: "EF1091",
     }
 
 
@@ -412,6 +427,12 @@ def fake_config_entry(config_entry_data) -> ConfigEntry:
 @pytest.fixture
 def discovered_machines() -> list[DiscoveredMachine]:
     return [
-        DiscoveredMachine(address="192.0.2.10", name="Kitchen Jura", fw="TT237W V06.11", via="udp"),
+        DiscoveredMachine(
+            address="192.0.2.10",
+            name="Kitchen Jura",
+            fw="TT237W V06.11",
+            via="udp",
+            article_number=15396,
+        ),
         DiscoveredMachine(address="192.0.2.11", name="192.0.2.11", via="tcp"),
     ]

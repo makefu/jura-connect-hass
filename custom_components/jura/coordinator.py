@@ -17,6 +17,7 @@ from .const import (
     CONF_AUTH_HASH,
     CONF_CONN_ID,
     CONF_HOST,
+    CONF_MACHINE_TYPE,
     CONF_PIN,
     CONF_PORT,
     DEFAULT_PORT,
@@ -57,6 +58,7 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
             pin=data.get(CONF_PIN, ""),
             conn_id=data[CONF_CONN_ID],
             auth_hash=data.get(CONF_AUTH_HASH, ""),
+            machine_type=data.get(CONF_MACHINE_TYPE),
         )
 
     async def _async_update_data(self) -> MachineSnapshot:

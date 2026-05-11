@@ -17,8 +17,11 @@ from jura_connect import (
     DestructiveCommandError,
     HandshakeError,
     JuraClient,
+    MachineProfile,
     PairingTimeout,
     discover,
+    load_profile,
+    lookup_by_article_number,
     run_named,
     scan_tcp,
     tcp_probe,
@@ -35,6 +38,30 @@ from .base import (
 _LOGGER = logging.getLogger(__name__)
 
 
+def _resolve_profile_and_name(machine_type: str | None) -> tuple[MachineProfile | None, str | None]:
+    """Load the per-machine profile + look up its friendly name.
+
+    Returns ``(None, None)`` for an unset or unknown machine_type so the
+    backend silently falls through to the EF536 baseline.
+    """
+    if not machine_type:
+        return None, None
+    try:
+        profile = load_profile(machine_type)
+    except KeyError:
+        _LOGGER.warning("unknown machine_type %r, falling through to baseline", machine_type)
+        return None, None
+    # Friendly-name lookup: walk the catalogue once.
+    friendly: str | None = None
+    from jura_connect import known_machine_names
+
+    for name, code in known_machine_names():
+        if code == machine_type:
+            friendly = name
+            break
+    return profile, friendly
+
+
 class JuraConnectBackend(JuraBackend):
     """Async wrapper around ``jura_connect.JuraClient``."""
 
@@ -46,6 +73,7 @@ class JuraConnectBackend(JuraBackend):
         pin: str = "",
         conn_id: str,
         auth_hash: str = "",
+        machine_type: str | None = None,
         connect_timeout: float = 5.0,
         read_timeout: float = 10.0,
     ) -> None:
@@ -54,8 +82,10 @@ class JuraConnectBackend(JuraBackend):
         self.pin = pin
         self.conn_id = conn_id
         self.auth_hash = auth_hash
+        self.machine_type = machine_type or None
         self.connect_timeout = connect_timeout
         self.read_timeout = read_timeout
+        self._profile, self._machine_type_name = _resolve_profile_and_name(self.machine_type)
 
     def _make_client(self) -> JuraClient:
         return JuraClient(
@@ -66,6 +96,7 @@ class JuraConnectBackend(JuraBackend):
             auth_hash=self.auth_hash,
             connect_timeout=self.connect_timeout,
             read_timeout=self.read_timeout,
+            profile=self._profile,
         )
 
     async def pair(self, on_prompt: Callable[[str], None] | None = None) -> str:
@@ -97,6 +128,18 @@ class JuraConnectBackend(JuraBackend):
                 if handshake.state != "CORRECT":
                     raise JuraAuthError(f"handshake state {handshake.state}")
                 info = client.read_machine_info()
+                # Brew counters are optional — older firmware doesn't
+                # populate the @TR:32 statistics bank, and per the
+                # library docs returns empty pages. Tolerate any
+                # failure here and ship the rest of the snapshot.
+                try:
+                    counters = client.read_product_counters()
+                    brews_total = counters.total
+                    brews = dict(counters.by_name)
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.debug("product counters unavailable: %s", err)
+                    brews_total = 0
+                    brews = {}
             except HandshakeError as err:
                 raise JuraAuthError(str(err)) from err
             except OSError as err:
@@ -122,6 +165,10 @@ class JuraConnectBackend(JuraBackend):
                     "decalc": info.maintenance_percent.decalc,
                 },
                 raw_status_hex=info.status.raw.hex().upper(),
+                brews=brews,
+                brews_total=brews_total,
+                machine_type=self.machine_type,
+                machine_type_name=self._machine_type_name,
             )
 
         return await asyncio.to_thread(_do)
@@ -186,7 +233,13 @@ async def discover_machines(
     def _udp() -> list[DiscoveredMachine]:
         try:
             return [
-                DiscoveredMachine(address=m.address, name=m.name, fw=m.fw, via="udp")
+                DiscoveredMachine(
+                    address=m.address,
+                    name=m.name,
+                    fw=m.fw,
+                    via="udp",
+                    article_number=m.article_number or None,
+                )
                 for m in discover(timeout=udp_timeout)
             ]
         except OSError as err:
@@ -220,3 +273,11 @@ async def probe_address(address: str, port: int = 51515) -> bool:
             return False
 
     return await asyncio.to_thread(_do)
+
+
+def machine_type_from_article(article_number: int | None) -> str | None:
+    """Map a UDP-discovered article number to an EF code, if known."""
+    if not article_number:
+        return None
+    entry = lookup_by_article_number(article_number)
+    return entry.ef_code if entry else None

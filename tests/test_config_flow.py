@@ -17,8 +17,10 @@ from custom_components.jura.const import (
     CONF_AUTH_HASH,
     CONF_CONN_ID,
     CONF_HOST,
+    CONF_MACHINE_TYPE,
     CONF_PIN,
     CONF_PORT,
+    MACHINE_TYPE_NONE,
     SELECTION_MANUAL,
 )
 
@@ -183,7 +185,7 @@ async def _drive_pair(flow, backend_factory):
         return await flow.async_step_pair_progress()
 
 
-async def test_pair_progress_success_advances_to_finish(flow):
+async def test_pair_progress_success_advances_to_machine_type(flow):
     flow._connection = {
         CONF_HOST: "192.0.2.10",
         CONF_PORT: 51515,
@@ -198,7 +200,7 @@ async def test_pair_progress_success_advances_to_finish(flow):
 
     result = await _drive_pair(flow, factory)
     assert result["type"] == "progress_done"
-    assert result["next_step_id"] == "finish"
+    assert result["next_step_id"] == "machine_type"
     assert flow._auth_hash == "a" * 64
 
 
@@ -208,12 +210,69 @@ async def test_finish_step_creates_entry(flow):
         CONF_PORT: 51515,
         CONF_PIN: "",
         CONF_CONN_ID: "homeassistant-test",
+        CONF_MACHINE_TYPE: "EF1091",
     }
     flow._auth_hash = "a" * 64
     result = await flow.async_step_finish()
     assert result["type"] == "create_entry"
     assert result["data"][CONF_AUTH_HASH] == "a" * 64
     assert result["data"][CONF_HOST] == "192.0.2.10"
+    assert result["data"][CONF_MACHINE_TYPE] == "EF1091"
+
+
+# ---------------------------------------------------------------------------
+# machine_type step
+# ---------------------------------------------------------------------------
+
+
+async def test_machine_type_step_form_lists_options(flow):
+    flow._connection = {
+        CONF_HOST: "192.0.2.10",
+        CONF_PORT: 51515,
+        CONF_PIN: "",
+        CONF_CONN_ID: "homeassistant-test",
+    }
+    result = await flow.async_step_machine_type()
+    assert result["type"] == "form"
+    assert result["step_id"] == "machine_type"
+
+
+async def test_machine_type_step_uses_auto_detected_default(flow):
+    flow._connection = {
+        CONF_HOST: "192.0.2.10",
+        CONF_PORT: 51515,
+        CONF_PIN: "",
+        CONF_CONN_ID: "homeassistant-test",
+    }
+    flow._auto_machine_type = "EF1091"
+    result = await flow.async_step_machine_type()
+    assert result["description_placeholders"]["detected"] == "EF1091"
+
+
+async def test_machine_type_step_submission_advances_to_finish(flow):
+    flow._connection = {
+        CONF_HOST: "192.0.2.10",
+        CONF_PORT: 51515,
+        CONF_PIN: "",
+        CONF_CONN_ID: "homeassistant-test",
+    }
+    flow._auth_hash = "a" * 64
+    result = await flow.async_step_machine_type({CONF_MACHINE_TYPE: "EF1091"})
+    assert result["type"] == "create_entry"
+    assert result["data"][CONF_MACHINE_TYPE] == "EF1091"
+
+
+async def test_machine_type_step_baseline_sets_none(flow):
+    flow._connection = {
+        CONF_HOST: "192.0.2.10",
+        CONF_PORT: 51515,
+        CONF_PIN: "",
+        CONF_CONN_ID: "homeassistant-test",
+    }
+    flow._auth_hash = "a" * 64
+    result = await flow.async_step_machine_type({CONF_MACHINE_TYPE: MACHINE_TYPE_NONE})
+    assert result["type"] == "create_entry"
+    assert result["data"][CONF_MACHINE_TYPE] is None
 
 
 @pytest.mark.parametrize(

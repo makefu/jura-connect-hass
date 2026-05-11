@@ -10,6 +10,10 @@ CONF_PORT = "port"
 CONF_PIN = "pin"
 CONF_CONN_ID = "conn_id"
 CONF_AUTH_HASH = "auth_hash"
+CONF_MACHINE_TYPE = "machine_type"
+
+# Sentinel for "leave machine_type unset" in the machine_type config-flow step.
+MACHINE_TYPE_NONE = "_none_"
 
 DEFAULT_PORT = 51515
 DEFAULT_SCAN_INTERVAL = 60  # seconds

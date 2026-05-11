@@ -17,10 +17,16 @@ account.
   auth-hash, reconnect silently afterwards)
 - Sensors:
   - **State** — overall machine state derived from the active-alert bits
+  - **Machine type** — the EF code + friendly name (e.g. `S8 (EB)` with
+    `machine_type=EF1091` as attribute), set during config flow
   - **Maintenance counters** — cleaning / filter / decalc / cappu-rinse /
     coffee-rinse / cappu-clean
   - **Maintenance percent** — cleaning / filter / decalc (0–100 % or
     unavailable when the indicator is absent)
+  - **Brew counters** — one sensor per recipe the machine reports
+    (espresso, coffee, cappuccino, …) plus a *Total brews* sensor. The
+    set of recipes is read from the machine's own product table; names
+    come from the per-machine profile when configured.
 - Binary sensors for every well-known alert (water low, beans empty, drip
   tray, milk warning, …) plus a `connectivity` binary sensor that reports
   whether the last poll succeeded
@@ -58,6 +64,11 @@ directory and restart.
 3. When prompted, **press OK on the coffee machine** to accept the pairing.
    The integration stores the resulting auth-hash on the config entry; you
    only do this once per machine.
+4. Pick your machine model from the dropdown. The list comes from the 88
+   machine profiles bundled with `jura-connect`. Auto-detection pre-selects
+   the right model when the WiFi dongle replies to UDP discovery; otherwise
+   choose your model (e.g. `S8 (EB) [EF1091]`) or stick with *Use baseline
+   (no profile)* for a generic EF536 fallback.
 
 ## Services
 

@@ -25,6 +25,18 @@ class MachineSnapshot:
     counters: dict[str, int] = field(default_factory=dict)
     percents: dict[str, int] = field(default_factory=dict)
     raw_status_hex: str = ""
+    # Per-product brew counts. ``brews`` is keyed by product name (e.g.
+    # "espresso"); ``brews_total`` is the global counter from slot 0.
+    # Empty dict if the machine doesn't support the @TR:32 statistics
+    # bank (e.g. TT237W V06.11 reports zero pages).
+    brews: dict[str, int] = field(default_factory=dict)
+    brews_total: int = 0
+    # Machine variant identification. ``machine_type`` is the EF code
+    # ("EF1091" for an S8 EB) configured for the integration;
+    # ``machine_type_name`` is the catalogue's friendly name
+    # ("S8 (EB)"). Both are ``None`` when the user picked the baseline.
+    machine_type: str | None = None
+    machine_type_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -35,6 +47,7 @@ class DiscoveredMachine:
     name: str
     fw: str = ""
     via: str = "udp"  # "udp" | "tcp"
+    article_number: int | None = None  # from UDP broadcast; None for TCP-only hits
 
 
 class JuraBackendError(Exception):

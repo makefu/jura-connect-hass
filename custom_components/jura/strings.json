@@ -32,6 +32,13 @@
             "pair_failed": {
                 "title": "Pairing failed",
                 "description": "Could not pair with the machine at {host}.\n\nDetails: {error}\n\nClick Submit to try again."
+            },
+            "machine_type": {
+                "title": "Choose your Jura model",
+                "description": "Selecting the correct model lets Home Assistant name brew counters and status alerts using your machine's own product table. Auto-detected: {detected}.\n\nLeave it on \"Use baseline (no profile)\" if your machine isn't in the list — the integration will fall back to a generic EF536 mapping.",
+                "data": {
+                    "machine_type": "Model"
+                }
             }
         },
         "progress": {

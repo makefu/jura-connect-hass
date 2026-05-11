@@ -26,11 +26,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1778529431,
-        "narHash": "sha256-V09Jq94QXK6RYkaSHA8nkSt6HgZ99EnKuyALV3x14TM=",
+        "lastModified": 1778531127,
+        "narHash": "sha256-FFYG3p24o6GU4vEiAnGJDMLkuBDTb+qhGJXStzF5aII=",
         "owner": "makefu",
         "repo": "jura-connect",
-        "rev": "c4a034cbfc4fdcbb1a08488f5895a64efd64d49c",
+        "rev": "de4168e9bd7df5bb8f0c33ffcee103876e6c5734",
         "type": "github"
       },
       "original": {

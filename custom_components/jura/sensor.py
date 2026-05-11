@@ -6,6 +6,7 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -65,7 +66,7 @@ def _derive_state(active_alerts: tuple[str, ...]) -> str:
 class StateSensor(JuraEntity, SensorEntity):
     """Overall machine state derived from the active alert bits."""
 
-    _attr_name = "State"
+    _attr_name = "Status"
     _attr_icon = "mdi:coffee-maker"
 
     def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry) -> None:
@@ -88,10 +89,16 @@ class StateSensor(JuraEntity, SensorEntity):
 
 
 class CounterSensor(JuraEntity, SensorEntity):
-    """One maintenance counter (cleaning / decalc / filter / cappu / coffee rinse)."""
+    """One maintenance counter (cleaning / decalc / filter / cappu / coffee rinse).
+
+    Counters are diagnostic — they're useful for spotting "the machine has
+    been cleaned 21 times" but not the day-to-day state most automations
+    care about. Pushed to the DIAGNOSTIC section of the device card.
+    """
 
     _attr_icon = "mdi:counter"
     _attr_state_class = "total_increasing"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
         self,
@@ -101,7 +108,9 @@ class CounterSensor(JuraEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator, config_entry)
         self._key = key
-        self._attr_name = f"{key.replace('_', ' ').title()} counter"
+        # The "Cycles" prefix groups all counter entities together when
+        # the device card sorts entities alphabetically within a category.
+        self._attr_name = f"Cycles {key.replace('_', ' ')}"
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_counter_{key}"
 
     @property
@@ -113,7 +122,11 @@ class CounterSensor(JuraEntity, SensorEntity):
 
 
 class PercentSensor(JuraEntity, SensorEntity):
-    """Maintenance percent indicator (0-100, or unavailable when sensor absent)."""
+    """Maintenance percent indicator (0-100, or unavailable when sensor absent).
+
+    These show "how soon does the machine need cleaning / descaling /
+    filter change" — user-facing, so left in the default category.
+    """
 
     _attr_icon = "mdi:percent-outline"
     _attr_native_unit_of_measurement = "%"
@@ -126,7 +139,8 @@ class PercentSensor(JuraEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator, config_entry)
         self._key = key
-        self._attr_name = f"{key.replace('_', ' ').title()} percent"
+        # "Service" prefix clusters the three percent indicators together.
+        self._attr_name = f"Service {key.replace('_', ' ')} level"
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_percent_{key}"
 
     @property
@@ -160,7 +174,9 @@ class BrewCounterSensor(JuraEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator, config_entry)
         self._product = product_name
-        self._attr_name = product_name.replace("_", " ").title()
+        # "Brew" prefix clusters all per-recipe counters next to each other
+        # and to the BrewTotalSensor on the device card.
+        self._attr_name = f"Brew {product_name.replace('_', ' ')}"
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_brews_{product_name}"
 
     @property
@@ -174,7 +190,8 @@ class BrewCounterSensor(JuraEntity, SensorEntity):
 class BrewTotalSensor(JuraEntity, SensorEntity):
     """Lifetime total brews across all recipes (slot 0 of the @TR:32 table)."""
 
-    _attr_name = "Total brews"
+    # Named so it sorts at the end of the "Brew …" group on the device card.
+    _attr_name = "Brew total"
     _attr_icon = "mdi:counter"
     _attr_native_unit_of_measurement = "brews"
     _attr_state_class = "total_increasing"
@@ -196,11 +213,13 @@ class MachineTypeSensor(JuraEntity, SensorEntity):
 
     The friendly name (e.g. "S8 (EB)") is the entity state; the EF
     code lives on ``machine_type`` in the attributes so automations can
-    use either.
+    use either. Diagnostic by nature: set once at setup and never
+    changes again.
     """
 
     _attr_name = "Machine type"
     _attr_icon = "mdi:coffee-maker-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry) -> None:
         super().__init__(coordinator, config_entry)

@@ -14,6 +14,7 @@ from custom_components.jura.sensor import (
     PercentSensor,
     StateSensor,
 )
+from homeassistant.const import EntityCategory
 
 
 def _make_coordinator(snapshot):
@@ -83,6 +84,48 @@ def test_percent_sensor_full_set(sample_snapshot, fake_config_entry):
         s = PercentSensor(coordinator, fake_config_entry, key)
         assert s.unique_id.endswith(f"percent_{key}")
         assert s.native_unit_of_measurement == "%"
+
+
+# ---------------------------------------------------------------------------
+# Naming + entity_category (device-card grouping)
+# ---------------------------------------------------------------------------
+
+
+def test_state_sensor_groups_under_status(fake_config_entry, sample_snapshot):
+    s = StateSensor(_make_coordinator(sample_snapshot), fake_config_entry)
+    assert s.name == "Status"
+    assert s.entity_category is None
+
+
+def test_counter_sensor_is_diagnostic_and_named_with_cycles_prefix(sample_snapshot, fake_config_entry):
+    s = CounterSensor(_make_coordinator(sample_snapshot), fake_config_entry, "cleaning")
+    assert s.entity_category == EntityCategory.DIAGNOSTIC
+    assert s.name == "Cycles cleaning"
+
+
+def test_percent_sensor_is_default_category_and_named_with_service_prefix(sample_snapshot, fake_config_entry):
+    s = PercentSensor(_make_coordinator(sample_snapshot), fake_config_entry, "decalc")
+    assert s.entity_category is None
+    assert s.name == "Service decalc level"
+
+
+def test_brew_counter_named_with_brew_prefix(sample_snapshot, fake_config_entry):
+    s = BrewCounterSensor(_make_coordinator(sample_snapshot), fake_config_entry, "espresso")
+    assert s.entity_category is None
+    assert s.name == "Brew espresso"
+
+
+def test_brew_total_sorts_with_brew_group(sample_snapshot, fake_config_entry):
+    s = BrewTotalSensor(_make_coordinator(sample_snapshot), fake_config_entry)
+    assert s.entity_category is None
+    assert s.name == "Brew total"
+    # "Brew total" sorts after "Brew espresso", "Brew coffee", etc.
+    assert s.name > BrewCounterSensor(_make_coordinator(sample_snapshot), fake_config_entry, "espresso").name
+
+
+def test_machine_type_is_diagnostic(sample_snapshot, fake_config_entry):
+    s = MachineTypeSensor(_make_coordinator(sample_snapshot), fake_config_entry)
+    assert s.entity_category == EntityCategory.DIAGNOSTIC
 
 
 # ---------------------------------------------------------------------------

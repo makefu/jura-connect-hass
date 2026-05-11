@@ -54,7 +54,9 @@ STATE_PRIORITY: tuple[str, ...] = (
 STATE_IDLE = "idle"
 
 # Alerts that we expose as dedicated binary_sensor entities. The value is the
-# Home Assistant device_class for the entity.
+# Home Assistant device_class for the entity. Problem-class alerts stay in
+# the default category; running and informational alerts move to
+# DIAGNOSTIC so the main device card surfaces only "needs attention" items.
 ALERT_BINARY_SENSORS: dict[str, str | None] = {
     "fill_water": "problem",
     "no_beans": "problem",
@@ -74,6 +76,11 @@ ALERT_BINARY_SENSORS: dict[str, str | None] = {
     "coffee_ready": None,
     "welcome": None,
 }
+
+# Alerts whose device class is "running" or `None` are diagnostic by nature
+# (heating up, ready, welcome) — they describe state rather than something
+# the user must act on. Keep them off the main device card.
+DIAGNOSTIC_ALERT_DEVICE_CLASSES: frozenset[str | None] = frozenset({"running", None})
 
 # Maintenance counters & percent: shape of MaintenanceCounters / MaintenancePercent
 # dataclass fields. Sensors are created for each key listed.

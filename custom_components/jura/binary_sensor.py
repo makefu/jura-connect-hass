@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import ALERT_BINARY_SENSORS, DOMAIN
+from .const import ALERT_BINARY_SENSORS, DIAGNOSTIC_ALERT_DEVICE_CLASSES, DOMAIN
 from .coordinator import JuraCoordinator
 from .entity import JuraEntity
 
@@ -38,13 +39,21 @@ class AlertBinarySensor(JuraEntity, BinarySensorEntity):
     ) -> None:
         super().__init__(coordinator, config_entry)
         self._alert = alert
-        self._attr_name = alert.replace("_", " ").capitalize()
+        # "Alert" prefix groups every alert binary_sensor together on the
+        # device card. Sort order within the group is then alphabetical
+        # by alert name.
+        self._attr_name = f"Alert {alert.replace('_', ' ')}"
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_alert_{alert}"
         if device_class is not None:
             try:
                 self._attr_device_class = BinarySensorDeviceClass(device_class)
             except ValueError:
                 self._attr_device_class = None
+        # Push everything that isn't a "problem" (running/info/unknown)
+        # into DIAGNOSTIC so the main device card surfaces only entries
+        # that ask the user to do something.
+        if device_class in DIAGNOSTIC_ALERT_DEVICE_CLASSES:
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
     def is_on(self) -> bool | None:
@@ -59,11 +68,14 @@ class ConnectivityBinarySensor(JuraEntity, BinarySensorEntity):
 
     Unlike alert entities this one is *always* available — it's the
     canonical signal automations should consult to decide whether the
-    machine is reachable right now.
+    machine is reachable right now. Categorised as DIAGNOSTIC: it
+    belongs next to the machine-type entity, not in the "needs
+    attention" main section.
     """
 
     _attr_name = "Connectivity"
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry) -> None:
         super().__init__(coordinator, config_entry)

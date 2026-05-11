@@ -33,7 +33,12 @@ class Platform:
     BINARY_SENSOR = "binary_sensor"
 
 
-_make_module("homeassistant.const", Platform=Platform)
+class EntityCategory(str, Enum):
+    CONFIG = "config"
+    DIAGNOSTIC = "diagnostic"
+
+
+_make_module("homeassistant.const", Platform=Platform, EntityCategory=EntityCategory)
 
 
 # --- homeassistant.core ---
@@ -284,6 +289,10 @@ class SensorEntity:
     def device_class(self):
         return getattr(self, "_attr_device_class", None)
 
+    @property
+    def entity_category(self):
+        return getattr(self, "_attr_entity_category", None)
+
 
 class SensorDeviceClass:
     MONETARY = "monetary"
@@ -309,6 +318,10 @@ class BinarySensorEntity:
     @property
     def device_class(self):
         return getattr(self, "_attr_device_class", None)
+
+    @property
+    def entity_category(self):
+        return getattr(self, "_attr_entity_category", None)
 
 
 class BinarySensorDeviceClass(str, Enum):

@@ -1,0 +1,37 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Set up Jura Coffee",
+                "description": "Pick a discovered machine, or choose 'Enter manually' to type the IP.",
+                "data": {
+                    "selection": "Machine"
+                }
+            },
+            "manual": {
+                "title": "Manual setup",
+                "description": "Enter the machine's IP address.",
+                "data": {
+                    "host": "Host / IP address",
+                    "port": "TCP port",
+                    "pin": "Front-panel PIN (leave blank if none set)",
+                    "conn_id": "Connection identifier"
+                }
+            },
+            "pair": {
+                "title": "Pair with the machine",
+                "description": "Press OK on the coffee machine to accept this connection. Waiting up to 60 seconds."
+            }
+        },
+        "error": {
+            "cannot_connect": "Unable to connect to the machine. Check that the IP is reachable and the WiFi dongle is online.",
+            "pairing_timeout": "The machine did not accept the connection in time. Press OK on the machine before submitting.",
+            "wrong_pin": "The machine rejected the PIN.",
+            "wrong_hash": "The machine rejected the stored credentials. Re-pair the integration.",
+            "unknown": "Unexpected error during setup. See the Home Assistant log for details."
+        },
+        "abort": {
+            "already_configured": "This machine is already configured."
+        }
+    }
+}

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ha-jura"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "jura_connect>=0.6.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["custom_components*"]
+
+[tool.setuptools.package-data]
+"custom_components.jura" = ["manifest.json", "services.yaml", "strings.json"]
+
+[project.scripts]
+jura-ha = "custom_components.jura.cli:main"
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.mypy]
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -1,0 +1,161 @@
+force_update:
+  name: Force Update
+  description: Force an immediate poll of the machine.
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      description: The config entry ID of the machine (alternative to entity_id).
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      description: Any Jura sensor entity (alternative to config_entry_id).
+      selector:
+        entity:
+          integration: jura
+
+lock_screen:
+  name: Lock Screen
+  description: Lock the machine's front-panel display.
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      selector:
+        entity:
+          integration: jura
+
+unlock_screen:
+  name: Unlock Screen
+  description: Unlock the machine's front-panel display.
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      selector:
+        entity:
+          integration: jura
+
+brew:
+  name: Brew
+  description: Start brewing a product. Recipe codes are firmware-specific (e.g. 01 = espresso on many models).
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      selector:
+        entity:
+          integration: jura
+    recipe:
+      name: Recipe
+      description: Product code, e.g. "01" for espresso. Consult your machine's documentation.
+      required: true
+      selector:
+        text:
+
+clean:
+  name: Start Cleaning Cycle
+  description: Start the coffee-system cleaning cycle (~5 min, requires cleaning tablet, locks machine).
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      selector:
+        entity:
+          integration: jura
+
+decalc:
+  name: Start Descaling Cycle
+  description: Start the descaling cycle (30+ min, requires descaler in tank).
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      selector:
+        entity:
+          integration: jura
+
+filter_change:
+  name: Filter Change
+  description: Run the water-filter change procedure.
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      selector:
+        entity:
+          integration: jura
+
+cappu_rinse:
+  name: Rinse Milk System
+  description: Rinse the cappuccino system with hot water.
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      selector:
+        entity:
+          integration: jura
+
+cappu_clean:
+  name: Clean Milk System
+  description: Run the cappuccino-system cleaning cycle (requires milk-system cleaning tablet).
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      selector:
+        entity:
+          integration: jura
+
+power_off:
+  name: Power Off
+  description: Put the machine into standby. Re-enabling requires manual wake-up.
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      selector:
+        entity:
+          integration: jura
+
+restart:
+  name: Restart WiFi Dongle
+  description: Reboot the WiFi dongle. The integration will reconnect automatically.
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      selector:
+        entity:
+          integration: jura

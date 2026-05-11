@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+result
+result-*
+.secrets.yml
+*.egg-info/
+dist/
+.claude
+tmp/

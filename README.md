@@ -22,7 +22,12 @@ account.
   - **Maintenance percent** — cleaning / filter / decalc (0–100 % or
     unavailable when the indicator is absent)
 - Binary sensors for every well-known alert (water low, beans empty, drip
-  tray, milk warning, …)
+  tray, milk warning, …) plus a `connectivity` binary sensor that reports
+  whether the last poll succeeded
+- Entities keep showing their last value when the machine is offline — use
+  the `connectivity` binary sensor (or the standard
+  `homeassistant.update_entity` failure) to gate automations on actual
+  reachability
 - Services for everything the library supports safely: lock/unlock screen,
   brew a recipe, run cleaning / descaling / filter-change / cappu-rinse /
   cappu-clean cycles, power off, restart the dongle

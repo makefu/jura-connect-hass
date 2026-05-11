@@ -72,9 +72,21 @@ class _ConfigFlowMeta(type):
         return cls
 
 
+class _FakeHass:
+    """Hass stub with just the bits the config flow needs."""
+
+    def __init__(self) -> None:
+        self.data: dict = {}
+
+    def async_create_task(self, coro):
+        import asyncio
+
+        return asyncio.ensure_future(coro)
+
+
 class ConfigFlow(metaclass=_ConfigFlowMeta):
     DOMAIN: str | None = None
-    hass = MagicMock()
+    hass = _FakeHass()
 
     async def async_set_unique_id(self, unique_id: str) -> None:
         self._unique_id = unique_id
@@ -82,16 +94,32 @@ class ConfigFlow(metaclass=_ConfigFlowMeta):
     def _abort_if_unique_id_configured(self) -> None:
         pass
 
-    def async_show_form(self, *, step_id, data_schema, errors=None):
+    def async_show_form(self, *, step_id, data_schema=None, errors=None, description_placeholders=None):
         return ConfigFlowResult(
             type="form",
             step_id=step_id,
             data_schema=data_schema,
             errors=errors or {},
+            description_placeholders=description_placeholders or {},
         )
+
+    def async_show_progress(self, *, step_id, progress_action, progress_task, description_placeholders=None):
+        return ConfigFlowResult(
+            type="progress",
+            step_id=step_id,
+            progress_action=progress_action,
+            progress_task=progress_task,
+            description_placeholders=description_placeholders or {},
+        )
+
+    def async_show_progress_done(self, *, next_step_id):
+        return ConfigFlowResult(type="progress_done", next_step_id=next_step_id)
 
     def async_create_entry(self, *, title, data):
         return ConfigFlowResult(type="create_entry", title=title, data=data)
+
+    def async_abort(self, *, reason):
+        return ConfigFlowResult(type="abort", reason=reason)
 
 
 class ConfigEntry:
@@ -196,12 +224,23 @@ class DataUpdateCoordinator:
         self.update_interval = update_interval
         self.config_entry = config_entry
         self.data = None
+        self.last_update_success = True
 
     async def async_config_entry_first_refresh(self):
-        self.data = await self._async_update_data()
+        try:
+            self.data = await self._async_update_data()
+            self.last_update_success = True
+        except Exception:
+            self.last_update_success = False
+            raise
 
     async def async_request_refresh(self):
-        self.data = await self._async_update_data()
+        try:
+            self.data = await self._async_update_data()
+            self.last_update_success = True
+        except Exception:
+            self.last_update_success = False
+            raise
 
     async def _async_update_data(self):
         raise NotImplementedError

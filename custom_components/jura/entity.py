@@ -32,3 +32,10 @@ class JuraEntity(CoordinatorEntity[JuraCoordinator]):
             manufacturer="JURA",
             entry_type=DeviceEntryType.SERVICE,
         )
+
+    @property
+    def available(self) -> bool:
+        # Machines are routinely offline — keep the last-known snapshot visible
+        # instead of flipping every sensor to "unavailable" on a failed poll.
+        # The connectivity binary_sensor is the canonical reachability signal.
+        return self.coordinator.data is not None

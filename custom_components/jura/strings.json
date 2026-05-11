@@ -3,32 +3,49 @@
         "step": {
             "user": {
                 "title": "Set up Jura Coffee",
-                "description": "Pick a discovered machine, or choose 'Enter manually' to type the IP.",
+                "description": "How would you like to find your coffee machine?",
                 "data": {
-                    "selection": "Machine"
+                    "mode": "Setup method"
+                }
+            },
+            "no_machines_found": {
+                "title": "No machines found",
+                "description": "No Jura coffee machines were detected on your network. Make sure the machine is powered on and connected to the same WiFi as Home Assistant. Click Submit to enter the IP address manually."
+            },
+            "select": {
+                "title": "Choose a machine",
+                "description": "These machines were detected on your network:",
+                "data": {
+                    "address": "Machine"
                 }
             },
             "manual": {
                 "title": "Manual setup",
-                "description": "Enter the machine's IP address.",
+                "description": "Enter your coffee machine's IP address. The WiFi dongle listens on TCP port 51515 by default. Leave PIN empty unless you set one on the machine.",
                 "data": {
-                    "host": "Host / IP address",
+                    "host": "IP address",
                     "port": "TCP port",
-                    "pin": "Front-panel PIN (leave blank if none set)",
-                    "conn_id": "Connection identifier"
+                    "pin": "Front-panel PIN",
+                    "conn_id": "Connection name"
                 }
             },
-            "pair": {
-                "title": "Pair with the machine",
-                "description": "Press OK on the coffee machine to accept this connection. Waiting up to 60 seconds."
+            "pair_failed": {
+                "title": "Pairing failed",
+                "description": "Could not pair with the machine at {host}.\n\nDetails: {error}\n\nClick Submit to try again."
             }
         },
+        "progress": {
+            "discovering": "Searching for Jura coffee machines on your network. This takes up to 5 seconds.",
+            "pairing": "Connecting to {host}.\n\nWalk to your coffee machine — it should be showing a \"Connect\" prompt. Press OK on the machine display to accept this connection.\n\nWaiting up to 60 seconds."
+        },
         "error": {
-            "cannot_connect": "Unable to connect to the machine. Check that the IP is reachable and the WiFi dongle is online.",
-            "pairing_timeout": "The machine did not accept the connection in time. Press OK on the machine before submitting.",
-            "wrong_pin": "The machine rejected the PIN.",
-            "wrong_hash": "The machine rejected the stored credentials. Re-pair the integration.",
-            "unknown": "Unexpected error during setup. See the Home Assistant log for details."
+            "cannot_connect": "Could not reach the machine. Verify it's powered on, on the same network, and that the IP address is correct.",
+            "pairing_timeout": "The machine did not accept the connection within 60 seconds. Make sure to press OK on the coffee machine's display when prompted, then try again.",
+            "pairing_aborted": "The pairing was rejected on the machine (you pressed Cancel, or the Connect dialog timed out). Try again and press OK on the machine.",
+            "pairing_rejected": "The machine refused the pairing request. This usually means the Connect dialog never appeared — check that the machine is powered on and reachable.",
+            "wrong_pin": "The machine requires a PIN, or the PIN you provided is wrong. Go back to manual setup and enter the correct PIN.",
+            "wrong_hash": "The stored credentials are no longer valid. Remove and re-add the integration to re-pair.",
+            "unknown": "Unexpected error during pairing."
         },
         "abort": {
             "already_configured": "This machine is already configured."

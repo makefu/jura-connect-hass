@@ -16,7 +16,7 @@ pkgs.testers.nixosTest {
         customComponents = [
           (pkgs.stdenvNoCC.mkDerivation {
             pname = "ha-jura";
-            version = "0.1.0";
+            version = "0.2.0";
             src = ../.;
             installPhase = ''
               mkdir -p $out/custom_components

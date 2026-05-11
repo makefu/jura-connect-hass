@@ -18,10 +18,12 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: JuraCoordinator = hass.data[DOMAIN][config_entry.entry_id]
-    async_add_entities(
+    entities: list[BinarySensorEntity] = [ConnectivityBinarySensor(coordinator, config_entry)]
+    entities.extend(
         AlertBinarySensor(coordinator, config_entry, alert, device_class)
         for alert, device_class in ALERT_BINARY_SENSORS.items()
     )
+    async_add_entities(entities)
 
 
 class AlertBinarySensor(JuraEntity, BinarySensorEntity):
@@ -50,3 +52,27 @@ class AlertBinarySensor(JuraEntity, BinarySensorEntity):
         if snapshot is None:
             return None
         return self._alert in snapshot.active_alerts
+
+
+class ConnectivityBinarySensor(JuraEntity, BinarySensorEntity):
+    """Tracks whether the last coordinator poll succeeded.
+
+    Unlike alert entities this one is *always* available — it's the
+    canonical signal automations should consult to decide whether the
+    machine is reachable right now.
+    """
+
+    _attr_name = "Connectivity"
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+
+    def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry) -> None:
+        super().__init__(coordinator, config_entry)
+        self._attr_unique_id = f"{DOMAIN}_{self._slug}_connectivity"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        return bool(self.coordinator.last_update_success)

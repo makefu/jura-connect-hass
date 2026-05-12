@@ -162,7 +162,9 @@ def test_number_entity_native_value_parses_hex(ef1091, sample_snapshot, fake_con
     assert entity.native_value == 16.0
 
 
-async def test_number_entity_writes_decimal_string(ef1091, sample_snapshot, fake_config_entry):
+async def test_number_entity_writes_hex_string(ef1091, sample_snapshot, fake_config_entry):
+    """The library's set_setting parses step-slider input as hex, so the
+    entity has to convert the user's integer to a hex string. 18 dec -> 12 hex."""
     hardness = _setting_by_name(ef1091, "hardness")
     write = AsyncMock()
     entity = SettingNumberEntity(
@@ -171,4 +173,16 @@ async def test_number_entity_writes_decimal_string(ef1091, sample_snapshot, fake
         hardness,
     )
     await entity.async_set_native_value(18)
-    write.assert_awaited_once_with("hardness", "18")
+    write.assert_awaited_once_with("hardness", "12")
+
+
+async def test_number_entity_writes_zero_padded_hex(ef1091, sample_snapshot, fake_config_entry):
+    hardness = _setting_by_name(ef1091, "hardness")
+    write = AsyncMock()
+    entity = SettingNumberEntity(
+        _coordinator(sample_snapshot, write_setting=write),
+        fake_config_entry,
+        hardness,
+    )
+    await entity.async_set_native_value(5)  # 0x05
+    write.assert_awaited_once_with("hardness", "05")

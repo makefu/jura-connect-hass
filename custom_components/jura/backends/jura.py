@@ -142,12 +142,15 @@ class JuraConnectBackend(JuraBackend):
                     brews = {}
                 # Settings (per profile). Each read is one extra round
                 # trip — 7 settings on EF1091 add ~350ms. Skip cleanly
-                # when no profile is configured.
+                # when no profile is configured. ``list_settings`` and
+                # ``get_setting`` were added in jura_connect 0.9.4 and
+                # are the canonical name-based read path; both refuse
+                # to run if no profile is loaded.
                 settings_values: dict[str, str] = {}
-                if self._profile and self._profile.settings:
-                    for setting in self._profile.settings:
+                if self._profile is not None:
+                    for setting in client.list_settings():
                         try:
-                            settings_values[setting.name] = client.read_setting(setting.p_argument)
+                            settings_values[setting.name] = client.get_setting(setting.name).raw
                         except Exception as err:  # noqa: BLE001
                             _LOGGER.debug("setting %s unavailable: %s", setting.name, err)
             except HandshakeError as err:
@@ -194,23 +197,24 @@ class JuraConnectBackend(JuraBackend):
         await self.run_named("unlock")
 
     async def write_setting(self, name: str, value: str) -> str:
-        """Validate ``value`` against the profile and write it.
+        """Write a setting and return the post-write stored hex.
 
-        Raises :class:`JuraBackendError` if no profile is loaded (we
-        can't validate without one), if the dongle rejects the write,
-        or if the post-write read-back doesn't match what we sent.
-        Raises :class:`ValueError` if the value is rejected by
-        ``SettingDef.normalise_value`` before any wire traffic.
+        Validation happens inside :meth:`JuraClient.set_setting` —
+        the library accepts either an ITEM name (``"30min"``,
+        ``"english"``) or the wire-format hex, refuses anything else
+        before the request hits the wire, and raises :class:`ValueError`
+        on rejection.
 
-        Returns the post-write stored hex value so the caller can
-        update its in-memory cache without waiting for the next poll.
+        Returns the canonical read-back hex so the coordinator can
+        update the in-memory snapshot without waiting for the next
+        poll. For ItemSlider settings the dongle stores a stripped
+        suffix (writing ``211E`` reads back ``1E``); the caller's
+        :meth:`SettingDef.item_from_hex` resolves it for display.
         """
         if self._profile is None:
             raise JuraBackendError("no machine profile loaded; cannot write settings")
-        setting = self._profile.setting_by_name.get(name)
-        if setting is None:
+        if self._profile.setting_by_name.get(name) is None:
             raise JuraBackendError(f"setting {name!r} not in profile {self._profile.code}")
-        wire_value = setting.normalise_value(value)
 
         def _do() -> str:
             client = self._make_client()
@@ -218,22 +222,15 @@ class JuraConnectBackend(JuraBackend):
                 handshake = client.connect()
                 if handshake.state != "CORRECT":
                     raise JuraAuthError(f"handshake state {handshake.state}")
-                # ``JuraClient.write_setting`` (v0.9.2+) wraps the wire
-                # command in @TS:01 / @TS:00 and verifies by read-back;
-                # it raises ValueError when the dongle rejects the write
-                # or the stored value doesn't match. Re-raise as a
-                # backend error so HA shows the user a clear message.
                 try:
-                    client.write_setting(setting.p_argument, wire_value)
+                    client.set_setting(name, value)
                 except ValueError as err:
                     raise JuraBackendError(f"setting {name!r}: {err}") from err
-                # Read the canonical stored value back. The library's
-                # verify=True path already did this for validation but
-                # threw the result away. For ItemSlider settings
-                # (AutoOFF, frother_instructions) the stored form is a
-                # stripped suffix of what we wrote; using read-back
-                # avoids a stale-display race against the next poll.
-                stored = client.read_setting(setting.p_argument)
+                # Read back via the name-based API for the canonical
+                # stored form. ``get_setting`` returns a SettingValue
+                # whose ``raw`` is what's actually on the dongle
+                # (post type-tag strip on AutoOFF etc.).
+                stored = client.get_setting(name).raw
             except HandshakeError as err:
                 raise JuraAuthError(str(err)) from err
             except OSError as err:

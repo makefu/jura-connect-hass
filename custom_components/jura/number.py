@@ -77,4 +77,10 @@ class SettingNumberEntity(JuraEntity, NumberEntity):
             return None
 
     async def async_set_native_value(self, value: float) -> None:
-        await self.coordinator.write_setting(self._setting.name, str(int(value)))
+        # ``JuraClient.set_setting`` (the underlying write path)
+        # parses step-slider input as **hex**, not decimal — matching
+        # the wire format. Width comes from the SettingDef's mask so
+        # both 1- and 2-byte sliders encode correctly.
+        n = int(value)
+        width = len(self._setting.mask) if self._setting.mask else 2
+        await self.coordinator.write_setting(self._setting.name, f"{n:0{width}X}")

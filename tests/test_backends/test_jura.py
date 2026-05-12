@@ -125,26 +125,43 @@ async def test_fetch_no_profile_no_settings(running_simulator):
     assert snapshot.settings == {}
 
 
-async def test_write_setting_round_trip(running_simulator):
-    """Writes go through normalisation + checksum + handshake on a real client."""
+async def test_write_setting_round_trip_hex_step_slider(running_simulator):
+    """Step-slider writes accept hex form (matching set_setting's contract)."""
     host, port = running_simulator.address
     backend = JuraConnectBackend(host, port, conn_id="ha-test", machine_type="EF1091")
     await backend.pair()
 
-    # Hardness is a step_slider on EF1091 — value comes in as a decimal string.
-    await backend.write_setting("hardness", "18")
+    # Hardness is a step_slider on EF1091. 18 dec -> 12 hex on the wire.
+    await backend.write_setting("hardness", "12")
 
     snapshot = await backend.fetch()
-    # The simulator stores the written value; the raw hex is "12" (18).
     assert snapshot.settings.get("hardness", "").upper() == "12"
 
 
-async def test_write_setting_rejects_unknown_value(running_simulator):
+async def test_write_setting_round_trip_item_name(running_simulator):
+    """ItemSlider / combobox writes accept the catalogue ITEM name."""
     host, port = running_simulator.address
     backend = JuraConnectBackend(host, port, conn_id="ha-test", machine_type="EF1091")
     await backend.pair()
 
-    with pytest.raises(ValueError):
+    await backend.write_setting("language", "english")
+
+    snapshot = await backend.fetch()
+    # English's catalogue value is "02" on EF1091.
+    assert snapshot.settings.get("language", "").upper() == "02"
+
+
+async def test_write_setting_rejects_unknown_value(running_simulator):
+    from custom_components.jura.backends.base import JuraBackendError
+
+    host, port = running_simulator.address
+    backend = JuraConnectBackend(host, port, conn_id="ha-test", machine_type="EF1091")
+    await backend.pair()
+
+    # The library's set_setting raises ValueError on unknown values; the
+    # backend wraps it as JuraBackendError so it routes through the
+    # coordinator's UpdateFailed branch and HA shows a clean error.
+    with pytest.raises(JuraBackendError):
         await backend.write_setting("language", "klingon")
 
 

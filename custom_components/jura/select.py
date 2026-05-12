@@ -86,7 +86,22 @@ class SettingSelectEntity(JuraEntity, SelectEntity):
         raw = snapshot.settings.get(self._setting.name)
         if not raw:
             return None
-        return self._value_to_name.get(raw.upper())
+        upper = raw.upper()
+        # Exact-value match covers switches, comboboxes, and the
+        # short ItemSlider entries (15min has value 0F, no type-tag).
+        direct = self._value_to_name.get(upper)
+        if direct is not None:
+            return direct
+        # The TT237W dongle stores ItemSlider values without the
+        # 1-byte length tag (writing `211E` for 30min reads back as
+        # `1E`; `22012C` for 5h reads back as `012C`). Fall back to
+        # suffix matching the catalogue values — same approach the
+        # upstream library uses in its `_format_setting_result`
+        # helper for CLI display.
+        for catalogue_value, name in self._value_to_name.items():
+            if catalogue_value.endswith(upper):
+                return name
+        return None
 
     async def async_select_option(self, option: str) -> None:
         await self.coordinator.write_setting(self._setting.name, option)

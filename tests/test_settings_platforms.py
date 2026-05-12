@@ -74,6 +74,75 @@ async def test_select_entity_writes_via_coordinator(ef1091, sample_snapshot, fak
 
 
 # ---------------------------------------------------------------------------
+# item_slider read-back: the dongle strips the 1-byte type tag on store
+# ---------------------------------------------------------------------------
+
+
+def _ef1091_auto_off_entity(snapshot_settings, fake_config_entry, ef1091):
+    from dataclasses import replace
+
+    auto_off = ef1091.setting_by_name["auto_off"]
+    snap = replace(_snap_with(snapshot_settings), settings=snapshot_settings)
+    return SettingSelectEntity(_coordinator(snap), fake_config_entry, auto_off)
+
+
+def _snap_with(settings):
+    # Build a snapshot the entity can read. The other fields don't
+    # matter for current_option testing.
+    from custom_components.jura.backends.base import MachineSnapshot
+
+    return MachineSnapshot(
+        address="192.0.2.10",
+        conn_id="x",
+        handshake_state="CORRECT",
+        active_alerts=(),
+        settings=settings,
+    )
+
+
+def test_auto_off_30min_displays_after_stripped_readback(ef1091, fake_config_entry):
+    """Writing `211E` (30min) stores `1E` on TT237W; the entity must
+    still resolve `1E` to `30min` via suffix-matching the catalogue."""
+    entity = _ef1091_auto_off_entity({"auto_off": "1E"}, fake_config_entry, ef1091)
+    assert entity.current_option == "30min"
+
+
+def test_auto_off_5h_displays_after_2byte_stripped_readback(ef1091, fake_config_entry):
+    """The 2-byte ItemSlider entries (5h..9h) strip to 4 hex chars."""
+    entity = _ef1091_auto_off_entity({"auto_off": "012C"}, fake_config_entry, ef1091)
+    assert entity.current_option == "5h"
+
+
+def test_auto_off_15min_displays_directly(ef1091, fake_config_entry):
+    """The shortest entry (15min) has no type-tag prefix, so the read-back
+    matches directly without needing suffix logic."""
+    entity = _ef1091_auto_off_entity({"auto_off": "0F"}, fake_config_entry, ef1091)
+    assert entity.current_option == "15min"
+
+
+def test_auto_off_full_catalogue_value_still_matches(ef1091, fake_config_entry):
+    """Defence in depth: if a firmware ever returns the full `211E` form,
+    the exact-match path should still find `30min`."""
+    entity = _ef1091_auto_off_entity({"auto_off": "211E"}, fake_config_entry, ef1091)
+    assert entity.current_option == "30min"
+
+
+def test_unknown_value_returns_none(ef1091, fake_config_entry):
+    entity = _ef1091_auto_off_entity({"auto_off": "DEAD"}, fake_config_entry, ef1091)
+    assert entity.current_option is None
+
+
+def test_normalise_value_writes_full_211E_for_30min(ef1091):
+    """The write side normalises by ITEM NAME, so picking '30min' must send
+    the full type-tagged `211E` — NOT the stripped `1E`. The user reported
+    seeing `30` (=0x1E) end up on the wire; this pins the correct value."""
+    auto_off = ef1091.setting_by_name["auto_off"]
+    assert auto_off.normalise_value("30min") == "211E"
+    assert auto_off.normalise_value("5h") == "22012C"
+    assert auto_off.normalise_value("15min") == "0F"
+
+
+# ---------------------------------------------------------------------------
 # SettingNumberEntity (step_slider)
 # ---------------------------------------------------------------------------
 

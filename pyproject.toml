@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ha-jura-connect"
-version = "0.7.0"
+version = "0.7.1"
 requires-python = ">=3.13"
 dependencies = [
-    "jura_connect>=0.9.1",
+    "jura_connect>=0.9.3",
 ]
 
 [tool.setuptools.packages.find]

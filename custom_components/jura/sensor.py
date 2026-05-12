@@ -12,7 +12,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .backends.base import MachineSnapshot
 from .const import (
-    CONF_MACHINE_TYPE,
     COUNTER_KEYS,
     DOMAIN,
     PERCENT_KEYS,
@@ -46,23 +45,6 @@ async def async_setup_entry(
     snapshot = coordinator.data
     if snapshot is not None:
         entities.extend(BrewCounterSensor(coordinator, config_entry, name) for name in snapshot.brews)
-
-    # Read-only sensors for each machine setting (the writable select /
-    # number entities live on their own platforms). Setup is gated on a
-    # configured machine_type because settings come from the profile.
-    machine_type = config_entry.data.get(CONF_MACHINE_TYPE)
-    if machine_type:
-        try:
-            from jura_connect import load_profile
-        except ImportError:  # pragma: no cover
-            profile = None
-        else:
-            try:
-                profile = load_profile(machine_type)
-            except KeyError:
-                profile = None
-        if profile is not None:
-            entities.extend(SettingValueSensor(coordinator, config_entry, setting) for setting in profile.settings)
 
     async_add_entities(entities)
 
@@ -224,58 +206,6 @@ class BrewTotalSensor(JuraEntity, SensorEntity):
         if snapshot is None:
             return None
         return snapshot.brews_total
-
-
-class SettingValueSensor(JuraEntity, SensorEntity):
-    """Read-only display of one machine setting.
-
-    Pairs with the writable :class:`SettingSelectEntity` / :class:`SettingNumberEntity`
-    on the ``select`` / ``number`` platforms — those live in the
-    configuration section and let the user change the value; this one
-    sits in the main view as a plain sensor so the current value is
-    always visible at a glance and friendly to template sensors,
-    history graphs, and automation triggers.
-
-    For item-driven settings (combobox / switch / item_slider) the
-    state is the friendly name from the catalogue (``"english"``,
-    ``"soft"``, ``"15min"``); for step_slider settings (water hardness)
-    it's the decimal integer value.
-    """
-
-    _attr_icon = "mdi:cog-outline"
-
-    def __init__(
-        self,
-        coordinator: JuraCoordinator,
-        config_entry: ConfigEntry,
-        setting_def,
-    ) -> None:
-        super().__init__(coordinator, config_entry)
-        self._setting = setting_def
-        # "Setting <name>" prefix groups all setting display sensors
-        # together on the device card alongside the other prefix groups
-        # ("Brew …", "Service …", "Cycles …").
-        self._attr_name = f"Setting {setting_def.name.replace('_', ' ')}"
-        self._attr_unique_id = f"{DOMAIN}_{self._slug}_setting_value_{setting_def.name}"
-        # For item-driven settings, prepare a hex->name lookup.
-        self._value_to_name = {item.value.upper(): item.name for item in setting_def.items}
-
-    @property
-    def native_value(self) -> str | int | None:
-        snapshot = _snapshot(self.coordinator)
-        if snapshot is None:
-            return None
-        raw = snapshot.settings.get(self._setting.name)
-        if not raw:
-            return None
-        # Item-driven setting — look up the friendly name.
-        if self._value_to_name:
-            return self._value_to_name.get(raw.upper(), raw.upper())
-        # step_slider — render the integer value.
-        try:
-            return int(raw, 16)
-        except ValueError:
-            return None
 
 
 class MachineTypeSensor(JuraEntity, SensorEntity):

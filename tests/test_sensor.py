@@ -12,7 +12,6 @@ from custom_components.jura.sensor import (
     CounterSensor,
     MachineTypeSensor,
     PercentSensor,
-    SettingValueSensor,
     StateSensor,
 )
 from homeassistant.const import EntityCategory
@@ -127,53 +126,6 @@ def test_brew_total_sorts_with_brew_group(sample_snapshot, fake_config_entry):
 def test_machine_type_is_diagnostic(sample_snapshot, fake_config_entry):
     s = MachineTypeSensor(_make_coordinator(sample_snapshot), fake_config_entry)
     assert s.entity_category == EntityCategory.DIAGNOSTIC
-
-
-# ---------------------------------------------------------------------------
-# Setting value sensors (read-only display of machine settings)
-# ---------------------------------------------------------------------------
-
-
-def _ef1091_setting(name):
-    import pytest
-
-    jc = pytest.importorskip("jura_connect")
-    profile = jc.load_profile("EF1091")
-    return profile.setting_by_name[name]
-
-
-def test_setting_value_sensor_decodes_item_to_friendly_name(sample_snapshot, fake_config_entry):
-    language = _ef1091_setting("language")
-    s = SettingValueSensor(_make_coordinator(sample_snapshot), fake_config_entry, language)
-    # sample_snapshot.settings["language"] = "02" -> "english" in EF1091
-    assert s.native_value == "english"
-
-
-def test_setting_value_sensor_decodes_step_slider_to_int(sample_snapshot, fake_config_entry):
-    hardness = _ef1091_setting("hardness")
-    s = SettingValueSensor(_make_coordinator(sample_snapshot), fake_config_entry, hardness)
-    # sample_snapshot.settings["hardness"] = "10" hex -> 16 decimal
-    assert s.native_value == 16
-
-
-def test_setting_value_sensor_returns_none_without_data(fake_config_entry):
-    hardness = _ef1091_setting("hardness")
-    s = SettingValueSensor(_make_coordinator(None), fake_config_entry, hardness)
-    assert s.native_value is None
-
-
-def test_setting_value_sensor_is_in_default_category(sample_snapshot, fake_config_entry):
-    """Sensor stays in the main device-card view; the writable equivalent
-    lives in the CONFIG section."""
-    hardness = _ef1091_setting("hardness")
-    s = SettingValueSensor(_make_coordinator(sample_snapshot), fake_config_entry, hardness)
-    assert s.entity_category is None
-
-
-def test_setting_value_sensor_unique_id_distinct_from_select(sample_snapshot, fake_config_entry):
-    hardness = _ef1091_setting("hardness")
-    s = SettingValueSensor(_make_coordinator(sample_snapshot), fake_config_entry, hardness)
-    assert s.unique_id.endswith("setting_value_hardness")
 
 
 # ---------------------------------------------------------------------------

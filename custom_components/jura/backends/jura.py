@@ -193,12 +193,17 @@ class JuraConnectBackend(JuraBackend):
     async def unlock(self) -> None:
         await self.run_named("unlock")
 
-    async def write_setting(self, name: str, value: str) -> None:
+    async def write_setting(self, name: str, value: str) -> str:
         """Validate ``value`` against the profile and write it.
 
         Raises :class:`JuraBackendError` if no profile is loaded (we
-        can't validate without one) or :class:`ValueError` if the
-        value is rejected by ``SettingDef.normalise_value``.
+        can't validate without one), if the dongle rejects the write,
+        or if the post-write read-back doesn't match what we sent.
+        Raises :class:`ValueError` if the value is rejected by
+        ``SettingDef.normalise_value`` before any wire traffic.
+
+        Returns the post-write stored hex value so the caller can
+        update its in-memory cache without waiting for the next poll.
         """
         if self._profile is None:
             raise JuraBackendError("no machine profile loaded; cannot write settings")
@@ -207,21 +212,37 @@ class JuraConnectBackend(JuraBackend):
             raise JuraBackendError(f"setting {name!r} not in profile {self._profile.code}")
         wire_value = setting.normalise_value(value)
 
-        def _do() -> None:
+        def _do() -> str:
             client = self._make_client()
             try:
                 handshake = client.connect()
                 if handshake.state != "CORRECT":
                     raise JuraAuthError(f"handshake state {handshake.state}")
-                client.write_setting(setting.p_argument, wire_value)
+                # ``JuraClient.write_setting`` (v0.9.2+) wraps the wire
+                # command in @TS:01 / @TS:00 and verifies by read-back;
+                # it raises ValueError when the dongle rejects the write
+                # or the stored value doesn't match. Re-raise as a
+                # backend error so HA shows the user a clear message.
+                try:
+                    client.write_setting(setting.p_argument, wire_value)
+                except ValueError as err:
+                    raise JuraBackendError(f"setting {name!r}: {err}") from err
+                # Read the canonical stored value back. The library's
+                # verify=True path already did this for validation but
+                # threw the result away. For ItemSlider settings
+                # (AutoOFF, frother_instructions) the stored form is a
+                # stripped suffix of what we wrote; using read-back
+                # avoids a stale-display race against the next poll.
+                stored = client.read_setting(setting.p_argument)
             except HandshakeError as err:
                 raise JuraAuthError(str(err)) from err
             except OSError as err:
                 raise JuraBackendError(f"I/O error talking to machine: {err}") from err
             finally:
                 client.close()
+            return stored
 
-        await asyncio.to_thread(_do)
+        return await asyncio.to_thread(_do)
 
     async def run_named(
         self,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from datetime import timedelta
 from typing import Any
@@ -94,12 +95,23 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
         return result
 
     async def write_setting(self, name: str, value: str) -> None:
-        """Write a machine setting (validated by the profile), then refresh."""
+        """Write a machine setting (validated by the profile) and reflect it
+        in coordinator state immediately.
+
+        ``async_request_refresh`` is debounced — relying on it alone
+        leaves the writable entities showing the stale value for up to
+        the polling interval. The backend's post-write read-back gives
+        us the canonical stored form, so we push it into ``self.data``
+        via ``async_set_updated_data`` and notify listeners in one
+        shot.
+        """
         try:
-            await self.backend.write_setting(name, value)
+            new_hex = await self.backend.write_setting(name, value)
         except JuraAuthError as err:
             raise ConfigEntryAuthFailed(f"authentication failed: {err}") from err
         except JuraBackendError as err:
             raise UpdateFailed(f"backend error: {err}") from err
 
-        await self.async_request_refresh()
+        if self.data is not None and new_hex:
+            updated_settings = {**self.data.settings, name: new_hex}
+            self.async_set_updated_data(dataclasses.replace(self.data, settings=updated_settings))

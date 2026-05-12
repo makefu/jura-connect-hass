@@ -100,10 +100,15 @@ class JuraBackend(ABC):
         """Dispatch a named command from the library's registry."""
 
     @abstractmethod
-    async def write_setting(self, name: str, value: str) -> None:
+    async def write_setting(self, name: str, value: str) -> str:
         """Write one machine setting by snake_case name + user-facing value.
 
         Implementations are responsible for validating ``value`` against
         the active machine profile and translating to the wire-format
-        hex string.
+        hex string. Returns the canonical stored value as read back
+        from the dongle after the write — for most settings this is
+        the same hex that was written, but for ItemSlider settings
+        like AutoOFF the dongle stores a stripped form (``211E`` ->
+        ``1E``) and the caller needs the stored form to update the
+        in-memory snapshot.
         """

@@ -249,6 +249,13 @@ class DataUpdateCoordinator:
             self.last_update_success = False
             raise
 
+    def async_set_updated_data(self, data):
+        # Real HA also notifies registered listeners; the test stub
+        # only needs to mirror the data attribute and the
+        # last_update_success reset.
+        self.data = data
+        self.last_update_success = True
+
     async def _async_update_data(self):
         raise NotImplementedError
 
@@ -482,6 +489,8 @@ def mock_backend(sample_snapshot) -> JuraBackend:
     backend.lock = AsyncMock()
     backend.unlock = AsyncMock()
     backend.run_named = AsyncMock(return_value={"name": "test", "value": "ok"})
+    # write_setting returns the canonical read-back hex by default.
+    backend.write_setting = AsyncMock(return_value="00")
     return backend
 
 

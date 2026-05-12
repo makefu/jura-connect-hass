@@ -69,3 +69,49 @@ async def test_run_command_backend_error_raises_update_failed(mock_backend, fake
     mock_backend.run_named.side_effect = JuraBackendError("timeout")
     with pytest.raises(UpdateFailed):
         await coordinator.run_command("clean", [], allow_destructive=True)
+
+
+# ---------------------------------------------------------------------------
+# write_setting — the bit that makes select/number entities reactive
+# ---------------------------------------------------------------------------
+
+
+async def test_write_setting_pushes_new_value_into_coordinator_data(mock_backend, fake_config_entry, sample_snapshot):
+    """After write_setting returns, coordinator.data must reflect the new
+    value immediately — entities read from coordinator.data, so any
+    debounced refresh would leave them showing stale state."""
+    coordinator = _make_coordinator(mock_backend, fake_config_entry)
+    coordinator.data = sample_snapshot
+    mock_backend.write_setting.return_value = "12"  # 18 decimal, the canonical stored form
+
+    await coordinator.write_setting("hardness", "18")
+
+    assert coordinator.data.settings["hardness"] == "12"
+    # Existing settings are preserved.
+    assert coordinator.data.settings["language"] == sample_snapshot.settings["language"]
+
+
+async def test_write_setting_no_op_on_data_when_data_is_none(mock_backend, fake_config_entry):
+    """First-poll-not-yet-completed case: write succeeds, but there's no
+    snapshot to update; coordinator must not crash."""
+    coordinator = _make_coordinator(mock_backend, fake_config_entry)
+    coordinator.data = None
+    mock_backend.write_setting.return_value = "12"
+
+    await coordinator.write_setting("hardness", "18")  # must not raise
+
+    assert coordinator.data is None
+
+
+async def test_write_setting_auth_error_raises_auth_failed(mock_backend, fake_config_entry):
+    coordinator = _make_coordinator(mock_backend, fake_config_entry)
+    mock_backend.write_setting.side_effect = JuraAuthError("expired")
+    with pytest.raises(ConfigEntryAuthFailed):
+        await coordinator.write_setting("hardness", "18")
+
+
+async def test_write_setting_backend_error_raises_update_failed(mock_backend, fake_config_entry):
+    coordinator = _make_coordinator(mock_backend, fake_config_entry)
+    mock_backend.write_setting.side_effect = JuraBackendError("rejection")
+    with pytest.raises(UpdateFailed):
+        await coordinator.write_setting("hardness", "18")

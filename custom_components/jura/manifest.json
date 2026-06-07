@@ -1,13 +1,17 @@
 {
     "domain": "jura",
     "name": "Jura Connect",
-    "codeowners": ["@makefu"],
+    "codeowners": [
+        "@makefu"
+    ],
     "config_flow": true,
     "dependencies": [],
     "documentation": "https://github.com/makefu/jura-connect-hass",
     "integration_type": "device",
     "iot_class": "local_polling",
     "issue_tracker": "https://github.com/makefu/jura-connect-hass/issues",
-    "requirements": ["jura_connect>=0.9.4"],
+    "requirements": [
+        "jura_connect>=0.10.0"
+    ],
     "version": "0.7.4"
 }

@@ -58,7 +58,30 @@ if _HAS_HOMEASSISTANT:
         }
     )
 
-    BREW_SCHEMA = _BASE_TARGET_SCHEMA.extend({vol.Required("recipe"): str})
+    # Optional recipe overrides, passed to jura_connect's brew command as
+    # ``param=value`` args (the lib validates them against the machine XML
+    # and builds the @TP recipe blob). Keys here -> lib CLI keys below.
+    BREW_SCHEMA = _BASE_TARGET_SCHEMA.extend(
+        {
+            vol.Required("recipe"): str,
+            vol.Optional("water"): vol.Coerce(int),
+            vol.Optional("strength"): vol.Coerce(int),
+            vol.Optional("temperature"): vol.In(["low", "normal", "high"]),
+            vol.Optional("milk_foam"): vol.Coerce(int),
+            vol.Optional("milk_break"): vol.Coerce(int),
+            vol.Optional("bypass"): vol.Coerce(int),
+        }
+    )
+
+    # HA service field -> jura_connect brew CLI key.
+    _BREW_OVERRIDE_KEYS: dict[str, str] = {
+        "water": "water",
+        "strength": "strength",
+        "temperature": "temp",
+        "milk_foam": "milk",
+        "milk_break": "milk_break",
+        "bypass": "bypass",
+    }
 
 
 def _resolve_config_entry_id(hass: HomeAssistant, call_data: dict) -> str:
@@ -120,8 +143,13 @@ def _register_services(hass: HomeAssistant) -> None:
     async def handle_brew(call: ServiceCall) -> ServiceResponse:
         config_entry_id = _resolve_config_entry_id(hass, call.data)
         coordinator = _get_coordinator(hass, config_entry_id)
-        recipe = call.data["recipe"]
-        return await coordinator.run_command("brew", [recipe], allow_destructive=True)
+        args = [call.data["recipe"]]
+        args += [
+            f"{cli_key}={call.data[field]}"
+            for field, cli_key in _BREW_OVERRIDE_KEYS.items()
+            if field in call.data
+        ]
+        return await coordinator.run_command("brew", args, allow_destructive=True)
 
     hass.services.async_register(
         DOMAIN,

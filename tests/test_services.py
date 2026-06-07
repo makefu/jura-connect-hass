@@ -127,6 +127,69 @@ async def test_brew_handler_passes_recipe_and_allow_destructive():
     assert result == {"name": "test", "value": "ok"}
 
 
+async def test_brew_handler_passes_recipe_overrides_in_cli_form():
+    """Optional recipe parameters become param=value args for the lib's
+    brew command (jura_connect >= 0.10 builds the @TP recipe blob)."""
+    coordinator = _mock_coordinator()
+    hass = _hass_with_coordinator(coordinator)
+    _register_services(hass)
+
+    handler = hass.services._registered[(DOMAIN, "brew")]["handler"]
+    call = MagicMock()
+    call.data = {
+        "config_entry_id": "test_entry_id",
+        "recipe": "espresso",
+        "water": 35,
+        "strength": 7,
+        "temperature": "high",
+    }
+    await handler(call)
+
+    coordinator.run_command.assert_awaited_once_with(
+        "brew",
+        ["espresso", "water=35", "strength=7", "temp=high"],
+        allow_destructive=True,
+    )
+
+
+async def test_brew_handler_passes_milk_and_bypass_overrides():
+    coordinator = _mock_coordinator()
+    hass = _hass_with_coordinator(coordinator)
+    _register_services(hass)
+
+    handler = hass.services._registered[(DOMAIN, "brew")]["handler"]
+    call = MagicMock()
+    call.data = {
+        "config_entry_id": "test_entry_id",
+        "recipe": "cappuccino",
+        "milk_foam": 20,
+        "milk_break": 5,
+        "bypass": 45,
+    }
+    await handler(call)
+
+    coordinator.run_command.assert_awaited_once_with(
+        "brew",
+        ["cappuccino", "milk=20", "milk_break=5", "bypass=45"],
+        allow_destructive=True,
+    )
+
+
+def test_brew_schema_validates_temperature_values():
+    from custom_components.jura import BREW_SCHEMA
+
+    ok = BREW_SCHEMA(
+        {"config_entry_id": "x", "recipe": "hotwater", "temperature": "high"}
+    )
+    assert ok["temperature"] == "high"
+    with pytest.raises(vol.Invalid):
+        BREW_SCHEMA(
+            {"config_entry_id": "x", "recipe": "hotwater", "temperature": "boiling"}
+        )
+    with pytest.raises(vol.Invalid):
+        BREW_SCHEMA({"config_entry_id": "x", "recipe": "hotwater", "water": "veel"})
+
+
 async def test_command_services_dispatch_with_destructive_allowed():
     coordinator = _mock_coordinator()
     hass = _hass_with_coordinator(coordinator)

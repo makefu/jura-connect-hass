@@ -44,7 +44,11 @@ unlock_screen:
 
 brew:
   name: Brew
-  description: Start brewing a product. Recipe codes are firmware-specific (e.g. 01 = espresso on many models).
+  description: >-
+    Start brewing a product. Pass the product name from the machine profile
+    ("espresso", "cappuccino", "hotwater"…) or a 2-hex product code; optional
+    fields override the machine's defaults and are validated against the
+    machine XML before anything is sent.
   fields:
     config_entry_id:
       name: Config Entry ID
@@ -56,11 +60,68 @@ brew:
         entity:
           integration: jura
     recipe:
-      name: Recipe
-      description: Product code, e.g. "01" for espresso. Consult your machine's documentation.
+      name: Product
+      description: >-
+        Product name from the machine profile (e.g. "espresso", "hotwater";
+        unambiguous substrings work) or a 2-hex product code. A full 16-byte
+        recipe blob is accepted verbatim as an escape hatch.
       required: true
       selector:
         text:
+    water:
+      name: Water (ml)
+      description: Water amount in millilitres (validated per product, steps of 5).
+      selector:
+        number:
+          min: 15
+          max: 450
+          step: 5
+          unit_of_measurement: ml
+          mode: box
+    strength:
+      name: Coffee strength
+      description: Brew strength level (coffee products only).
+      selector:
+        number:
+          min: 1
+          max: 10
+          mode: box
+    temperature:
+      name: Temperature
+      selector:
+        select:
+          options:
+            - low
+            - normal
+            - high
+    milk_foam:
+      name: Milk foam (seconds)
+      description: Milk-foam dispensing time (milk products only).
+      selector:
+        number:
+          min: 1
+          max: 120
+          unit_of_measurement: s
+          mode: box
+    milk_break:
+      name: Milk break (seconds)
+      description: Pause between milk and coffee phases (latte macchiato etc.).
+      selector:
+        number:
+          min: 0
+          max: 60
+          unit_of_measurement: s
+          mode: box
+    bypass:
+      name: Bypass water (ml)
+      description: Extra hot water through the bypass (Café Barista etc.).
+      selector:
+        number:
+          min: 0
+          max: 240
+          step: 5
+          unit_of_measurement: ml
+          mode: box
 
 clean:
   name: Start Cleaning Cycle

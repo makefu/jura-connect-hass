@@ -178,14 +178,10 @@ async def test_brew_handler_passes_milk_and_bypass_overrides():
 def test_brew_schema_validates_temperature_values():
     from custom_components.jura import BREW_SCHEMA
 
-    ok = BREW_SCHEMA(
-        {"config_entry_id": "x", "recipe": "hotwater", "temperature": "high"}
-    )
+    ok = BREW_SCHEMA({"config_entry_id": "x", "recipe": "hotwater", "temperature": "high"})
     assert ok["temperature"] == "high"
     with pytest.raises(vol.Invalid):
-        BREW_SCHEMA(
-            {"config_entry_id": "x", "recipe": "hotwater", "temperature": "boiling"}
-        )
+        BREW_SCHEMA({"config_entry_id": "x", "recipe": "hotwater", "temperature": "boiling"})
     with pytest.raises(vol.Invalid):
         BREW_SCHEMA({"config_entry_id": "x", "recipe": "hotwater", "water": "veel"})
 

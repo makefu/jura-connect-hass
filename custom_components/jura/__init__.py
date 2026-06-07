@@ -22,7 +22,13 @@ except ImportError:
 
 
 if _HAS_HOMEASSISTANT:
-    PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SELECT, Platform.NUMBER]
+    PLATFORMS = [
+        Platform.SENSOR,
+        Platform.BINARY_SENSOR,
+        Platform.SELECT,
+        Platform.NUMBER,
+        Platform.BUTTON,
+    ]
 
     SERVICE_FORCE_UPDATE = "force_update"
     SERVICE_LOCK_SCREEN = "lock_screen"
@@ -145,9 +151,7 @@ def _register_services(hass: HomeAssistant) -> None:
         coordinator = _get_coordinator(hass, config_entry_id)
         args = [call.data["recipe"]]
         args += [
-            f"{cli_key}={call.data[field]}"
-            for field, cli_key in _BREW_OVERRIDE_KEYS.items()
-            if field in call.data
+            f"{cli_key}={call.data[field]}" for field, cli_key in _BREW_OVERRIDE_KEYS.items() if field in call.data
         ]
         return await coordinator.run_command("brew", args, allow_destructive=True)
 

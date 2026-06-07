@@ -33,6 +33,7 @@ class Platform:
     BINARY_SENSOR = "binary_sensor"
     SELECT = "select"
     NUMBER = "number"
+    BUTTON = "button"
 
 
 class EntityCategory(str, Enum):
@@ -334,6 +335,31 @@ class SelectEntity:
 
 
 _make_module("homeassistant.components.select", SelectEntity=SelectEntity)
+
+
+# --- homeassistant.components.button ---
+class ButtonEntity:
+    @property
+    def unique_id(self):
+        return getattr(self, "_attr_unique_id", None)
+
+    @property
+    def name(self):
+        return getattr(self, "_attr_name", None)
+
+    @property
+    def icon(self):
+        return getattr(self, "_attr_icon", None)
+
+    @property
+    def entity_category(self):
+        return getattr(self, "_attr_entity_category", None)
+
+    async def async_press(self) -> None:  # pragma: no cover - overridden
+        raise NotImplementedError
+
+
+_make_module("homeassistant.components.button", ButtonEntity=ButtonEntity)
 
 
 # --- homeassistant.components.number ---

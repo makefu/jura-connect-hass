@@ -33,6 +33,7 @@ class Platform:
     BINARY_SENSOR = "binary_sensor"
     SELECT = "select"
     NUMBER = "number"
+    BUTTON = "button"
 
 
 class EntityCategory(str, Enum):
@@ -267,6 +268,11 @@ class CoordinatorEntity:
     def __init__(self, coordinator):
         self.coordinator = coordinator
 
+    def async_write_ha_state(self):
+        # Real HA pushes the new state to the registry/state machine; the
+        # test stub only needs the method to exist so entities can call it.
+        pass
+
 
 _make_module(
     "homeassistant.helpers.update_coordinator",
@@ -368,6 +374,24 @@ class NumberEntity:
 
 
 _make_module("homeassistant.components.number", NumberEntity=NumberEntity)
+
+
+# --- homeassistant.components.button ---
+class ButtonEntity:
+    @property
+    def unique_id(self):
+        return getattr(self, "_attr_unique_id", None)
+
+    @property
+    def name(self):
+        return getattr(self, "_attr_name", None)
+
+    @property
+    def entity_category(self):
+        return getattr(self, "_attr_entity_category", None)
+
+
+_make_module("homeassistant.components.button", ButtonEntity=ButtonEntity)
 
 
 # --- homeassistant.components.binary_sensor ---

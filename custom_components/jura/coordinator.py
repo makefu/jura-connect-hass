@@ -49,6 +49,12 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
             config_entry=config_entry,
         )
         self.backend: JuraBackend = backend or self._build_backend(config_entry)
+        # Staged "next brew" parameters per product code, e.g.
+        # ``{"30": {"strength": 8, "water_ml": 90, "temp": 2}}``. The brew
+        # parameter entities (select/number) write here; the brew button
+        # reads from here. Purely local — nothing is sent to the machine
+        # until the user presses the button or calls the brew service.
+        self.brew_params: dict[str, dict[str, int]] = {}
 
     @staticmethod
     def _build_backend(config_entry: ConfigEntry) -> JuraBackend:

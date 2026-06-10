@@ -44,7 +44,10 @@ unlock_screen:
 
 brew:
   name: Brew
-  description: Start brewing a product. Recipe codes are firmware-specific (e.g. 01 = espresso on many models).
+  description: >-
+    Brew a drink. Pick a product by name (optionally overriding
+    strength/water/temperature), or pass a raw recipe payload. This
+    PHYSICALLY brews a drink on the machine.
   fields:
     config_entry_id:
       name: Config Entry ID
@@ -55,10 +58,46 @@ brew:
       selector:
         entity:
           integration: jura
+    product:
+      name: Product
+      description: >-
+        Product name from the machine's product table (e.g. "Espresso").
+        See the "Brew <product>" buttons for the valid names on your model.
+        Mutually exclusive with recipe.
+      example: Espresso
+      selector:
+        text:
+    strength:
+      name: Coffee strength
+      description: Optional strength level (model-specific, e.g. 1-10). Defaults to the machine's value.
+      selector:
+        number:
+          min: 1
+          max: 16
+          mode: box
+    water_ml:
+      name: Water
+      description: Optional water amount in millilitres. Defaults to the machine's value.
+      selector:
+        number:
+          min: 0
+          max: 1000
+          unit_of_measurement: mL
+          mode: box
+    temperature:
+      name: Temperature
+      description: Optional temperature level (model-specific, e.g. 1 = Normal, 2 = High). Defaults to the machine's value.
+      selector:
+        number:
+          min: 1
+          max: 3
+          mode: box
     recipe:
-      name: Recipe
-      description: Product code, e.g. "01" for espresso. Consult your machine's documentation.
-      required: true
+      name: Recipe (advanced)
+      description: >-
+        Raw 16-byte hex payload without the @TP: prefix (legacy/advanced).
+        Mutually exclusive with product.
+      example: "02000809000002000100000000000000"
       selector:
         text:
 
@@ -76,9 +115,23 @@ clean:
         entity:
           integration: jura
 
-decalc:
-  name: Start Descaling Cycle
+descale:
+  name: Descale
   description: Start the descaling cycle (30+ min, requires descaler in tank).
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      selector:
+        entity:
+          integration: jura
+
+decalc:
+  name: Descale (legacy alias)
+  description: Deprecated alias of the Descale service. Start the descaling cycle (30+ min, requires descaler in tank).
   fields:
     config_entry_id:
       name: Config Entry ID

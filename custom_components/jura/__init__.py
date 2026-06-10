@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 
+from .brew import build_start_command, jura_connect_xml_dir, load_definition
+
 _LOGGER = logging.getLogger(__name__)
 
 try:
@@ -13,7 +15,7 @@ try:
     from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
     from homeassistant.helpers import entity_registry as er
 
-    from .const import DOMAIN
+    from .const import CONF_MACHINE_TYPE, DOMAIN
     from .coordinator import JuraCoordinator
 
     _HAS_HOMEASSISTANT = True
@@ -22,14 +24,21 @@ except ImportError:
 
 
 if _HAS_HOMEASSISTANT:
-    PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SELECT, Platform.NUMBER]
+    PLATFORMS = [
+        Platform.SENSOR,
+        Platform.BINARY_SENSOR,
+        Platform.SELECT,
+        Platform.NUMBER,
+        Platform.BUTTON,
+    ]
 
     SERVICE_FORCE_UPDATE = "force_update"
     SERVICE_LOCK_SCREEN = "lock_screen"
     SERVICE_UNLOCK_SCREEN = "unlock_screen"
     SERVICE_BREW = "brew"
     SERVICE_CLEAN = "clean"
-    SERVICE_DECALC = "decalc"
+    SERVICE_DESCALE = "descale"
+    SERVICE_DECALC = "decalc"  # legacy alias of descale (back-compat)
     SERVICE_FILTER_CHANGE = "filter_change"
     SERVICE_CAPPU_RINSE = "cappu_rinse"
     SERVICE_CAPPU_CLEAN = "cappu_clean"
@@ -38,11 +47,15 @@ if _HAS_HOMEASSISTANT:
 
     # Map HA service name -> jura_connect command name. Every entry runs with
     # ``allow_destructive=True`` because the user invoked the dedicated service
-    # explicitly; the named service *is* the opt-in.
+    # explicitly; the named service *is* the opt-in. ``descale`` is the
+    # user-facing name for the library's ``decalc`` command; ``decalc`` is
+    # kept as a backwards-compatible alias so existing automations keep
+    # working.
     _COMMAND_SERVICES: dict[str, str] = {
         SERVICE_LOCK_SCREEN: "lock",
         SERVICE_UNLOCK_SCREEN: "unlock",
         SERVICE_CLEAN: "clean",
+        SERVICE_DESCALE: "decalc",
         SERVICE_DECALC: "decalc",
         SERVICE_FILTER_CHANGE: "filter-change",
         SERVICE_CAPPU_RINSE: "cappu-rinse",
@@ -58,7 +71,19 @@ if _HAS_HOMEASSISTANT:
         }
     )
 
-    BREW_SCHEMA = _BASE_TARGET_SCHEMA.extend({vol.Required("recipe"): str})
+    # ``brew`` accepts either a friendly ``product`` (name from the machine's
+    # product table; strength/water_ml/temperature override the XML defaults)
+    # or a raw ``recipe`` (the 16-byte hex payload, legacy path). Exactly one
+    # of ``product`` / ``recipe`` is required — enforced in the handler.
+    BREW_SCHEMA = _BASE_TARGET_SCHEMA.extend(
+        {
+            vol.Optional("recipe"): str,
+            vol.Optional("product"): str,
+            vol.Optional("strength"): vol.Coerce(int),
+            vol.Optional("water_ml"): vol.Coerce(int),
+            vol.Optional("temperature"): vol.Coerce(int),
+        }
+    )
 
 
 def _resolve_config_entry_id(hass: HomeAssistant, call_data: dict) -> str:
@@ -83,6 +108,24 @@ def _get_coordinator(hass: HomeAssistant, config_entry_id: str) -> JuraCoordinat
     if config_entry_id not in hass.data.get(DOMAIN, {}):
         raise ValueError(f"Config entry {config_entry_id} not found")
     return hass.data[DOMAIN][config_entry_id]
+
+
+def _find_product(machine_type: str | None, name: str):
+    """Resolve a product *name* to its definition for ``machine_type``.
+
+    Products come from jura_connect's bundled XMLs (matched case-insensitively
+    by name). Returns ``None`` when the data, definition or product is missing.
+    """
+    base_dir = jura_connect_xml_dir()
+    if base_dir is None:
+        return None
+    definition = load_definition(machine_type, base_dir=base_dir)
+    if definition is None:
+        return None
+    for product in definition.products:
+        if product.name.casefold() == name.casefold():
+            return product
+    return None
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -120,7 +163,24 @@ def _register_services(hass: HomeAssistant) -> None:
     async def handle_brew(call: ServiceCall) -> ServiceResponse:
         config_entry_id = _resolve_config_entry_id(hass, call.data)
         coordinator = _get_coordinator(hass, config_entry_id)
-        recipe = call.data["recipe"]
+        product_name = call.data.get("product")
+        recipe = call.data.get("recipe")
+        if product_name and recipe:
+            raise vol.Invalid("Provide either product or recipe, not both")
+        if product_name:
+            machine_type = coordinator.config_entry.data.get(CONF_MACHINE_TYPE)
+            product = _find_product(machine_type, product_name)
+            if product is None:
+                raise ValueError(f"Unknown product {product_name!r} for machine {machine_type!r}")
+            payload = build_start_command(
+                product,
+                strength=call.data.get("strength"),
+                water_ml=call.data.get("water_ml"),
+                temp=call.data.get("temperature"),
+            )
+            recipe = payload.removeprefix("@TP:")
+        elif not recipe:
+            raise vol.Invalid("Provide either product or recipe")
         return await coordinator.run_command("brew", [recipe], allow_destructive=True)
 
     hass.services.async_register(

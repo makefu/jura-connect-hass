@@ -14,6 +14,7 @@ from .backends.base import MachineSnapshot
 from .const import (
     COUNTER_KEYS,
     DOMAIN,
+    FRIENDLY_LABELS,
     PERCENT_KEYS,
     STATE_IDLE,
     STATE_PRIORITY,
@@ -89,7 +90,7 @@ class StateSensor(JuraEntity, SensorEntity):
 
 
 class CounterSensor(JuraEntity, SensorEntity):
-    """One maintenance counter (cleaning / decalc / filter / cappu / coffee rinse).
+    """One maintenance counter (cleaning / descale / filter / cappu / coffee rinse).
 
     Counters are diagnostic — they're useful for spotting "the machine has
     been cleaned 21 times" but not the day-to-day state most automations
@@ -110,7 +111,7 @@ class CounterSensor(JuraEntity, SensorEntity):
         self._key = key
         # The "Cycles" prefix groups all counter entities together when
         # the device card sorts entities alphabetically within a category.
-        self._attr_name = f"Cycles {key.replace('_', ' ')}"
+        self._attr_name = f"Cycles {FRIENDLY_LABELS.get(key, key).replace('_', ' ')}"
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_counter_{key}"
 
     @property
@@ -140,7 +141,7 @@ class PercentSensor(JuraEntity, SensorEntity):
         super().__init__(coordinator, config_entry)
         self._key = key
         # "Service" prefix clusters the three percent indicators together.
-        self._attr_name = f"Service {key.replace('_', ' ')} level"
+        self._attr_name = f"Service {FRIENDLY_LABELS.get(key, key).replace('_', ' ')} level"
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_percent_{key}"
 
     @property

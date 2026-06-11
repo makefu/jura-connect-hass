@@ -8,7 +8,7 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import ALERT_BINARY_SENSORS, DIAGNOSTIC_ALERT_DEVICE_CLASSES, DOMAIN
+from .const import ALERT_BINARY_SENSORS, DIAGNOSTIC_ALERT_DEVICE_CLASSES, DOMAIN, FRIENDLY_LABELS
 from .coordinator import JuraCoordinator
 from .entity import JuraEntity
 
@@ -42,7 +42,7 @@ class AlertBinarySensor(JuraEntity, BinarySensorEntity):
         # "Alert" prefix groups every alert binary_sensor together on the
         # device card. Sort order within the group is then alphabetical
         # by alert name.
-        self._attr_name = f"Alert {alert.replace('_', ' ')}"
+        self._attr_name = f"Alert {FRIENDLY_LABELS.get(alert, alert).replace('_', ' ')}"
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_alert_{alert}"
         if device_class is not None:
             try:

@@ -13,7 +13,7 @@ account.
   milk warning, …)
 - Per-recipe brew counters (espresso, coffee, cappuccino, …) plus a
   lifetime total
-- Maintenance counters and percent-to-next indicators (cleaning, decalc,
+- Maintenance counters and percent-to-next indicators (cleaning, descale,
   filter, cappu rinse)
 - Machine settings as dropdowns / sliders (language, units, auto-off,
   water hardness, milk rinsing, …) with profile-driven validation

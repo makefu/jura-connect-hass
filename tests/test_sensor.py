@@ -106,7 +106,7 @@ def test_counter_sensor_is_diagnostic_and_named_with_cycles_prefix(sample_snapsh
 def test_percent_sensor_is_default_category_and_named_with_service_prefix(sample_snapshot, fake_config_entry):
     s = PercentSensor(_make_coordinator(sample_snapshot), fake_config_entry, "decalc")
     assert s.entity_category is None
-    assert s.name == "Service decalc level"
+    assert s.name == "Service descale level"
 
 
 def test_brew_counter_named_with_brew_prefix(sample_snapshot, fake_config_entry):

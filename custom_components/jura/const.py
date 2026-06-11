@@ -152,3 +152,11 @@ PERCENT_KEYS: tuple[str, ...] = (
 
 # 0xFF is the library's sentinel for "this percent indicator is absent / unknown".
 PERCENT_ABSENT_SENTINEL = 0xFF
+
+# User-facing label overrides (display only — the data keys stay exactly as the
+# library emits them, e.g. snapshot.counters["decalc"]). JURA's German-ism
+# "decalc" is shown to the user as the English "descale".
+FRIENDLY_LABELS: dict[str, str] = {
+    "decalc": "descale",
+    "decalc_alert": "descale_alert",
+}

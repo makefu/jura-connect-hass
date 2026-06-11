@@ -34,7 +34,7 @@ declaration; Nix users get it pinned via the flake input.
   (espresso, coffee, cappuccino, macchiato, americano, …). Set is
   discovered from the machine; names from the profile when configured.
 - **Brew total** — lifetime brews across all recipes.
-- **Service `<kind>` level** — `cleaning`, `decalc`, `filter change` —
+- **Service `<kind>` level** — `cleaning`, `descale`, `filter change` —
   the percent-to-next-service indicators (0–100 %).
 - **Setting `<name>`** — current value of each machine setting (language,
   hardness, auto-off, units, …); item-driven settings surface as the
@@ -75,7 +75,7 @@ declaration; Nix users get it pinned via the flake input.
 - **Connectivity** — the canonical "is the machine reachable right now"
   signal (`binary_sensor` with `device_class=connectivity`). Wire
   automations against this rather than the per-entity `available` flag.
-- **Cycles `<kind>`** — the six maintenance counters (cleaning, decalc,
+- **Cycles `<kind>`** — the six maintenance counters (cleaning, descale,
   filter change, cappu rinse, coffee rinse, cappu clean).
 - Running / informational binary sensors (heating up, coffee ready,
   welcome, please wait, …).
@@ -94,9 +94,9 @@ for reachability.
 | `jura.force_update`    | Poll the machine immediately                          |
 | `jura.lock_screen`     | Lock the front-panel display                          |
 | `jura.unlock_screen`   | Unlock the front-panel display                        |
-| `jura.brew`            | Start brewing a recipe (`recipe: "01"` = espresso)    |
+| `jura.brew`            | Brew by `product` name (+ optional strength/water/temp) |
 | `jura.clean`           | Start coffee-system cleaning cycle (~5 min)           |
-| `jura.decalc`          | Start descaling cycle (30+ min, requires descaler)    |
+| `jura.descale`         | Start descaling cycle (30+ min, requires descaler)    |
 | `jura.filter_change`   | Run water-filter change procedure                     |
 | `jura.cappu_rinse`     | Rinse the milk system                                 |
 | `jura.cappu_clean`     | Clean the milk system (requires cleaning tablet)      |

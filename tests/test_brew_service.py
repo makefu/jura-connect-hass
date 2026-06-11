@@ -2,9 +2,10 @@
 
 The ``jura.brew`` service gains a friendly ``product`` path (build the
 ``@TP:`` payload from the machine's product table) while keeping the
-legacy raw ``recipe`` path intact. ``jura.descale`` is the renamed UI
-service; ``jura.decalc`` stays as a backwards-compat alias. Both map to
-the library's ``decalc`` command. No machine I/O — run_command is mocked.
+legacy raw ``recipe`` path intact. ``jura.descale`` is the user-facing
+service name and maps to the library's ``decalc`` command; the legacy
+``jura.decalc`` service alias has been removed. No machine I/O —
+run_command is mocked.
 """
 
 from __future__ import annotations

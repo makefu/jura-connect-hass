@@ -8,11 +8,16 @@ Two families of selects live here:
   platform instead.
 * **Brew control panel** — a small, machine-wide set that stages the
   *next* brew: a product picker plus strength / water / temperature
-  selects. Each parameter select carries a ``"Machine Default"`` option
-  (meaning "let the machine use the selected product's own default") and
+  selects. Each parameter select carries a ``"Factory Default"`` option
+  (meaning "send that product's XML/factory default value" — i.e. pass
+  ``None`` to ``build_start_command``; it does NOT mean "use the machine's
+  own configured setting", which JURA WiFi has no mechanism for) and
   recomputes its options from whichever product is currently selected.
-  None of them talk to the machine; the brew button reads the staged
-  ``coordinator.brew_selection`` and encodes the ``@TP:`` start command.
+  Per-product choices persist across restarts (``coordinator.brew_prefs``):
+  picking a product hydrates the param selects from its saved prefs, and
+  editing a param remembers it for that product. None of them talk to the
+  machine; the brew button reads the staged ``coordinator.brew_selection``
+  and encodes the ``@TP:`` start command.
 """
 
 from __future__ import annotations
@@ -34,8 +39,11 @@ _LOGGER = logging.getLogger(__name__)
 
 SELECT_KINDS = {"switch", "combobox", "item_slider"}
 
-# Sentinel option meaning "don't override — use the product's machine default".
-MACHINE_DEFAULT = "Machine Default"
+# Sentinel option meaning "don't override — send the product's XML/factory
+# default value" (i.e. pass ``None`` to ``build_start_command``). This is NOT
+# "use the machine's own stored setting": JURA WiFi exposes no such mechanism,
+# so an explicit, clamped value is always sent.
+FACTORY_DEFAULT = "Factory Default"
 
 
 async def async_setup_entry(
@@ -141,11 +149,11 @@ class SettingSelectEntity(JuraEntity, SelectEntity):
 class BrewProductSelect(JuraEntity, SelectEntity):
     """Picks which product the brew button (and parameter selects) act on.
 
-    Selecting a product stores its Code on ``coordinator.brew_selection``
-    and resets strength/water/temperature back to "Machine Default" — the
-    previous parameter values rarely make sense for a different drink. It
-    then asks the coordinator to refresh listeners so the dependent
-    parameter selects re-render their (product-specific) options.
+    Selecting a product makes its Code the staged product and hydrates
+    strength/water/temperature from that product's *saved preferences*
+    (each missing param falls back to "Factory Default"). It then asks the
+    coordinator to refresh listeners so the dependent parameter selects
+    re-render their (product-specific) options and loaded values.
     """
 
     _attr_entity_category = EntityCategory.CONFIG
@@ -177,12 +185,9 @@ class BrewProductSelect(JuraEntity, SelectEntity):
             return
         for product in definition.products:
             if product.name == option:
-                self.coordinator.brew_selection.update(
-                    product=product.code,
-                    strength=None,
-                    water_ml=None,
-                    temp=None,
-                )
+                # Make this the current product and load its saved prefs into
+                # the staged selection.
+                self.coordinator.select_brew_product(product.code)
                 # Refresh the whole panel: the parameter selects' options and
                 # values depend on the now-current product.
                 self.coordinator.async_update_listeners()
@@ -193,10 +198,12 @@ class _BrewParamSelect(JuraEntity, SelectEntity):
     """Base for a brew parameter select bound to the *currently-selected* product.
 
     Subclasses bind to one product argument kind (strength / water /
-    temperature). Options always lead with :data:`MACHINE_DEFAULT`; the
+    temperature). Options always lead with :data:`FACTORY_DEFAULT`; the
     value lives on ``coordinator.brew_selection[<key>]`` where ``None``
-    means "machine default". The select is unavailable while the selected
-    product doesn't expose the argument.
+    means "Factory Default" (send the product's XML default). Changing the
+    value also remembers it for the current product (``coordinator.brew_prefs``)
+    and schedules a persistent save. The select is unavailable while the
+    selected product doesn't expose the argument.
     """
 
     _attr_entity_category = EntityCategory.CONFIG
@@ -221,8 +228,8 @@ class _BrewParamSelect(JuraEntity, SelectEntity):
     def options(self) -> list[str]:
         arg = self._arg()
         if arg is None:
-            return [MACHINE_DEFAULT]
-        return [MACHINE_DEFAULT, *self._value_options(arg)]
+            return [FACTORY_DEFAULT]
+        return [FACTORY_DEFAULT, *self._value_options(arg)]
 
     @property
     def current_option(self) -> str | None:
@@ -231,21 +238,22 @@ class _BrewParamSelect(JuraEntity, SelectEntity):
             return None
         value = self.coordinator.brew_selection.get(self._selection_key)
         if value is None:
-            return MACHINE_DEFAULT
+            return FACTORY_DEFAULT
         return self._option_for_value(arg, value)
 
     async def async_select_option(self, option: str) -> None:
-        if option == MACHINE_DEFAULT:
-            self.coordinator.brew_selection[self._selection_key] = None
-            self.async_write_ha_state()
-            return
-        arg = self._arg()
-        if arg is None:
-            return
-        value = self._value_for_option(arg, option)
-        if value is None:
-            return
-        self.coordinator.brew_selection[self._selection_key] = value
+        if option == FACTORY_DEFAULT:
+            value: int | None = None
+        else:
+            arg = self._arg()
+            if arg is None:
+                return
+            value = self._value_for_option(arg, option)
+            if value is None:
+                return
+        # Stage + remember for the current product, then persist (debounced).
+        self.coordinator.set_brew_param(self._selection_key, value)
+        await self.coordinator.save_brew_prefs()
         self.async_write_ha_state()
 
     # --- per-kind value <-> option mapping -------------------------------
@@ -279,7 +287,7 @@ class _ItemBrewSelect(_BrewParamSelect):
 
 
 class BrewStrengthSelect(_ItemBrewSelect):
-    """Coffee strength for the next brew (e.g. 1..10), or machine default."""
+    """Coffee strength for the next brew (e.g. 1..10), or Factory Default."""
 
     _arg_kind = "COFFEE_STRENGTH"
     _selection_key = "strength"
@@ -287,7 +295,7 @@ class BrewStrengthSelect(_ItemBrewSelect):
 
 
 class BrewTempSelect(_ItemBrewSelect):
-    """Temperature for the next brew (e.g. Low/Normal/High), or machine default."""
+    """Temperature for the next brew (e.g. Low/Normal/High), or Factory Default."""
 
     _arg_kind = "TEMPERATURE"
     _selection_key = "temp"
@@ -295,9 +303,9 @@ class BrewTempSelect(_ItemBrewSelect):
 
 
 class BrewWaterSelect(_BrewParamSelect):
-    """Water amount (mL) for the next brew, or machine default.
+    """Water amount (mL) for the next brew, or Factory Default.
 
-    A select (rather than a number) so it can carry the ``Machine Default``
+    A select (rather than a number) so it can carry the ``Factory Default``
     sentinel; its options are the product's ``min..max`` range in ``step``
     increments.
     """

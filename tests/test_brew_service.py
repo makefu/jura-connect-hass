@@ -107,6 +107,32 @@ async def test_brew_by_product_with_overrides():
     coordinator.run_command.assert_awaited_once_with("brew", [_OVERRIDE_RECIPE], allow_destructive=True)
 
 
+async def test_brew_by_product_clamps_out_of_range_water():
+    """An absurd water_ml clamps to the product's Max, never wrapping mod 256.
+
+    Espresso Doppio water Max 160 / step 5 -> 32 == 0x20. The pre-clamp code
+    masked with ``& 0xFF`` and would have sent 99999 // 5 == 19999 -> 0x1F.
+    """
+    pytest.importorskip("jura_connect")
+    from custom_components.jura.brew import jura_connect_xml_dir, load_definition
+
+    coordinator = _mock_coordinator()
+    hass = _hass_with_coordinator(coordinator)
+    _register_services(hass)
+    call = MagicMock()
+    call.data = {"config_entry_id": "test_entry_id", "product": "Espresso Doppio", "water_ml": 99999}
+    await _brew_handler(hass)(call)
+
+    sent = coordinator.run_command.await_args.args[1][0]
+    definition = load_definition("EF1091", base_dir=jura_connect_xml_dir())
+    product = next(p for p in definition.products if p.name.casefold() == "espresso doppio")
+    water = product.arg("WATER_AMOUNT")
+    expected = f"{water.max // (water.step or 1):02X}"
+    water_byte = sent[6:8]  # byte index 3 -> hex chars [6:8]
+    assert water_byte == expected
+    assert water_byte not in ("FF", "1F")
+
+
 async def test_brew_unknown_product_raises():
     pytest.importorskip("jura_connect")
     coordinator = _mock_coordinator()

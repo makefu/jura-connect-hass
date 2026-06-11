@@ -4,7 +4,7 @@ Covers SettingDef kind ``step_slider`` (Hardness on EF1091, etc.) —
 integer-valued range with min/max/step from the profile XML.
 
 Brew water amount is *not* a number here: it lives on the ``select``
-platform (``BrewWaterSelect``) so it can offer a "Machine Default"
+platform (``BrewWaterSelect``) so it can offer a "Factory Default"
 option alongside the millilitre choices.
 """
 

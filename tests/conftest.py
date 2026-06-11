@@ -216,6 +216,52 @@ _make_module(
 _make_module("homeassistant.helpers.entity_platform", AddEntitiesCallback=list)
 
 
+# --- homeassistant.helpers.storage ---
+class Store:
+    """Minimal persistent Store stub.
+
+    Mimics enough of ``homeassistant.helpers.storage.Store`` for the brew-prefs
+    persistence path: a process-wide, key-addressed backing dict stands in for
+    on-disk JSON. ``async_delay_save`` resolves and stores the data immediately
+    (the real one debounces) so load/save round-trips are deterministic in
+    tests. Values are deep-copied in/out to mimic JSON (de)serialisation, so the
+    in-memory caller dict and the "stored" copy never alias.
+    """
+
+    _backing: dict[str, object] = {}
+
+    def __init__(self, hass, version, key, **kwargs):
+        self.hass = hass
+        self.version = version
+        self.key = key
+
+    async def async_load(self):
+        import copy
+
+        return copy.deepcopy(Store._backing.get(self.key))
+
+    def async_delay_save(self, data_func, delay=0):
+        import copy
+
+        Store._backing[self.key] = copy.deepcopy(data_func())
+
+    async def async_save(self, data):
+        import copy
+
+        Store._backing[self.key] = copy.deepcopy(data)
+
+
+_make_module("homeassistant.helpers.storage", Store=Store)
+
+
+@pytest.fixture(autouse=True)
+def _clear_store_backing():
+    """Isolate persistence tests: wipe the Store's backing between tests."""
+    Store._backing.clear()
+    yield
+    Store._backing.clear()
+
+
 # --- homeassistant.helpers.update_coordinator ---
 class UpdateFailed(Exception):
     pass

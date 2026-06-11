@@ -2,9 +2,10 @@
 
 The redesigned brew UX is five entities shared across the whole machine
 (not per product): a product select, strength/water/temperature selects
-(each carrying a "Machine Default" sentinel), and a single brew button.
+(each carrying a "Factory Default" sentinel), and a single brew button.
 Selections are staged on ``coordinator.brew_selection``; the button reads
-them and encodes the ``@TP:`` start command. Nothing talks to a machine —
+them and encodes the ``@TP:`` start command. Per-product choices persist
+across restarts via ``coordinator.brew_prefs``. Nothing talks to a machine —
 ``run_command`` is mocked, so no live brew happens in tests.
 
 These exercise the real EF1030 (E6) bundled definition so the option
@@ -39,7 +40,7 @@ from custom_components.jura.select import (  # noqa: E402
 )
 from homeassistant.config_entries import ConfigEntry  # noqa: E402
 
-MACHINE_DEFAULT = "Machine Default"
+FACTORY_DEFAULT = "Factory Default"
 
 # EF1030 (E6) product names, in definition order.
 _EF1030_PRODUCTS = [
@@ -114,9 +115,10 @@ def test_product_select_options_and_current(fake_config_entry):
     assert entity.unique_id.endswith("brew_product")
 
 
-async def test_product_select_sets_code_and_resets_params():
+async def test_product_select_sets_code_and_loads_factory_default_params():
+    """With nothing saved for Coffee, switching to it loads all Factory Default."""
     coordinator = _coordinator()
-    # Stage some non-default params first.
+    # Stage some non-default params first (for the previously selected product).
     coordinator.brew_selection.update(strength=4, water_ml=120, temp=2)
     entity = BrewProductSelect(coordinator, _entry())
     await entity.async_select_option("Coffee")
@@ -127,6 +129,72 @@ async def test_product_select_sets_code_and_resets_params():
     assert entity.current_option == "Coffee"
 
 
+async def test_product_select_loads_saved_prefs_into_param_selects():
+    """A product with saved prefs hydrates the param selects when chosen."""
+    coordinator = _coordinator()
+    coordinator.brew_prefs["03"] = {"strength": 2, "water_ml": 130, "temp": 1}
+    entry = _entry()
+    product = BrewProductSelect(coordinator, entry)
+    strength = BrewStrengthSelect(coordinator, entry)
+    water = BrewWaterSelect(coordinator, entry)
+    temp = BrewTempSelect(coordinator, entry)
+
+    await product.async_select_option("Coffee")
+
+    assert coordinator.brew_selection == {
+        "product": "03",
+        "strength": 2,
+        "water_ml": 130,
+        "temp": 1,
+    }
+    assert strength.current_option == "2"
+    assert water.current_option == "130"
+    assert temp.current_option == "Normal"
+
+
+async def test_param_select_remembers_and_persists_across_restart():
+    """Net effect: set Coffee water once, it survives a coordinator restart.
+
+    Drives the real select entities (which call set_brew_param +
+    save_brew_prefs), then rebuilds the coordinator and reloads from the
+    (stubbed) Store to prove the value round-trips to "disk".
+    """
+    entry = _entry()
+    coordinator = _coordinator(entry)
+    await coordinator.async_load_brew_prefs()
+    product = BrewProductSelect(coordinator, entry)
+    water = BrewWaterSelect(coordinator, entry)
+
+    await product.async_select_option("Coffee")
+    await water.async_select_option("130")
+    assert coordinator.brew_prefs["03"]["water_ml"] == 130
+
+    # Restart: a fresh coordinator + reload reproduces the saved pref.
+    restarted = _coordinator(entry)
+    await restarted.async_load_brew_prefs()
+    assert restarted.brew_prefs["03"]["water_ml"] == 130
+    restarted.select_brew_product("03")
+    assert restarted.brew_selection["water_ml"] == 130
+
+
+async def test_param_select_factory_default_persists_none():
+    """Selecting Factory Default records None (and persists it)."""
+    entry = _entry()
+    coordinator = _coordinator(entry)
+    await coordinator.async_load_brew_prefs()
+    product = BrewProductSelect(coordinator, entry)
+    water = BrewWaterSelect(coordinator, entry)
+
+    await product.async_select_option("Coffee")
+    await water.async_select_option("130")
+    await water.async_select_option(FACTORY_DEFAULT)
+
+    assert coordinator.brew_prefs["03"]["water_ml"] is None
+    restarted = _coordinator(entry)
+    await restarted.async_load_brew_prefs()
+    assert restarted.brew_prefs.get("03", {}).get("water_ml") is None
+
+
 # ---------------------------------------------------------------------------
 # Strength select
 # ---------------------------------------------------------------------------
@@ -135,8 +203,8 @@ async def test_product_select_sets_code_and_resets_params():
 def test_strength_select_options_and_default():
     coordinator = _coordinator()  # Espresso selected
     entity = BrewStrengthSelect(coordinator, _entry())
-    assert entity.options == [MACHINE_DEFAULT, "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-    assert entity.current_option == MACHINE_DEFAULT
+    assert entity.options == [FACTORY_DEFAULT, "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+    assert entity.current_option == FACTORY_DEFAULT
     assert entity.available is True
     assert entity.entity_category == "config"
     assert entity.unique_id.endswith("brew_strength")
@@ -148,9 +216,9 @@ async def test_strength_select_set_and_machine_default():
     await entity.async_select_option("2")
     assert coordinator.brew_selection["strength"] == 2
     assert entity.current_option == "2"
-    await entity.async_select_option(MACHINE_DEFAULT)
+    await entity.async_select_option(FACTORY_DEFAULT)
     assert coordinator.brew_selection["strength"] is None
-    assert entity.current_option == MACHINE_DEFAULT
+    assert entity.current_option == FACTORY_DEFAULT
 
 
 async def test_strength_select_unavailable_without_strength_arg():
@@ -161,7 +229,7 @@ async def test_strength_select_unavailable_without_strength_arg():
     await product.async_select_option("Hotwater Portion(normal)")
     assert strength.available is False
     assert strength.current_option is None
-    assert strength.options == [MACHINE_DEFAULT]
+    assert strength.options == [FACTORY_DEFAULT]
 
 
 # ---------------------------------------------------------------------------
@@ -172,8 +240,8 @@ async def test_strength_select_unavailable_without_strength_arg():
 def test_water_select_options_from_range():
     coordinator = _coordinator()  # Espresso: 15..80 step 5
     entity = BrewWaterSelect(coordinator, _entry())
-    assert entity.options == [MACHINE_DEFAULT, *[str(v) for v in range(15, 81, 5)]]
-    assert entity.current_option == MACHINE_DEFAULT
+    assert entity.options == [FACTORY_DEFAULT, *[str(v) for v in range(15, 81, 5)]]
+    assert entity.current_option == FACTORY_DEFAULT
     assert entity.unique_id.endswith("brew_water_ml")
 
 
@@ -186,9 +254,9 @@ async def test_water_select_set_and_machine_default():
     await water.async_select_option("130")
     assert coordinator.brew_selection["water_ml"] == 130
     assert water.current_option == "130"
-    await water.async_select_option(MACHINE_DEFAULT)
+    await water.async_select_option(FACTORY_DEFAULT)
     assert coordinator.brew_selection["water_ml"] is None
-    assert water.current_option == MACHINE_DEFAULT
+    assert water.current_option == FACTORY_DEFAULT
 
 
 # ---------------------------------------------------------------------------
@@ -199,8 +267,8 @@ async def test_water_select_set_and_machine_default():
 def test_temp_select_options_and_mapping():
     coordinator = _coordinator()
     entity = BrewTempSelect(coordinator, _entry())
-    assert entity.options == [MACHINE_DEFAULT, "Low", "Normal", "High"]
-    assert entity.current_option == MACHINE_DEFAULT
+    assert entity.options == [FACTORY_DEFAULT, "Low", "Normal", "High"]
+    assert entity.current_option == FACTORY_DEFAULT
     assert entity.unique_id.endswith("brew_temp")
 
 
@@ -210,7 +278,7 @@ async def test_temp_select_set_and_machine_default():
     await entity.async_select_option("Normal")
     assert coordinator.brew_selection["temp"] == 1
     assert entity.current_option == "Normal"
-    await entity.async_select_option(MACHINE_DEFAULT)
+    await entity.async_select_option(FACTORY_DEFAULT)
     assert coordinator.brew_selection["temp"] is None
 
 
@@ -226,8 +294,8 @@ def test_button_name_and_unique_id():
     assert button.unique_id.endswith("homeassistant_test_brew")
 
 
-async def test_button_press_espresso_machine_default_vector():
-    """Espresso, all Machine Default -> the live-validated default vector."""
+async def test_button_press_espresso_factory_default_vector():
+    """Espresso, all Factory Default -> the live-validated default vector."""
     coordinator = _coordinator()  # Espresso selected, all params None
     button = JuraBrewButton(coordinator, _entry())
     await button.async_press()

@@ -58,11 +58,15 @@ declaration; Nix users get it pinned via the flake input.
   hardness on EF1091) with the min/max/step pulled from the profile XML.
 - **Brew control panel** — a compact, machine-wide set of controls for the
   next brew: a **Brew Product** select, plus **Brew Strength**, **Brew Water**
-  and **Brew Temperature** selects (each offering "Machine Default" alongside
-  the product's own options/range), and a single **Brew** button. Picking a
-  product re-scopes the parameter selects to that drink and resets them to the
-  machine default; parameters a product doesn't support (e.g. strength for hot
-  water) go unavailable. Pressing **Brew** physically brews the staged drink.
+  and **Brew Temperature** selects (each offering "Factory Default" alongside
+  the product's own options/range), and a single **Brew** button. "Factory
+  Default" sends that product's built-in (XML) default value — JURA's WiFi
+  protocol has no way to reuse the machine's own configured value, so every
+  brew sends explicit, range-clamped values. Picking a product re-scopes the
+  parameter selects to that drink and loads your saved choices for it (these
+  persist across restarts, per product); parameters a product doesn't support
+  (e.g. strength for hot water) go unavailable. Pressing **Brew** physically
+  brews the staged drink.
 
 ### Diagnostics (collapsed by default)
 

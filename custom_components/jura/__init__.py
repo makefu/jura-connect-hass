@@ -128,6 +128,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Jura from a config entry."""
     coordinator = JuraCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
+    # Restore persisted per-product brew preferences (strength/water/temp),
+    # keyed by product Code, so the brew panel remembers them across restarts.
+    await coordinator.async_load_brew_prefs()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 

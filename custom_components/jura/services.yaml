@@ -69,7 +69,9 @@ brew:
         text:
     strength:
       name: Coffee strength
-      description: Optional strength level (model-specific, e.g. 1-10). Defaults to the machine's value.
+      description: >-
+        Optional strength level (model-specific, e.g. 1-10). Omit for the
+        product's factory default. Clamped to the product's valid range.
       selector:
         number:
           min: 1
@@ -77,7 +79,9 @@ brew:
           mode: box
     water_ml:
       name: Water
-      description: Optional water amount in millilitres. Defaults to the machine's value.
+      description: >-
+        Optional water amount in millilitres. Omit for the product's factory
+        default. Clamped to the product's valid range.
       selector:
         number:
           min: 0
@@ -86,7 +90,9 @@ brew:
           mode: box
     temperature:
       name: Temperature
-      description: Optional temperature level (model-specific, e.g. 1 = Normal, 2 = High). Defaults to the machine's value.
+      description: >-
+        Optional temperature level (model-specific, e.g. 1 = Normal, 2 = High).
+        Omit for the product's factory default. Clamped to the product's valid set.
       selector:
         number:
           min: 1

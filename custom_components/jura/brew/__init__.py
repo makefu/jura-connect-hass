@@ -25,9 +25,11 @@ from .definitions import (
     load_definition,
     parse_definition_xml,
 )
+from .prefs import BREW_PARAMS, product_prefs, remember_param, selection_for_product
 from .products import build_start_command
 
 __all__ = [
+    "BREW_PARAMS",
     "AlertDef",
     "MachineDefinition",
     "ProductArg",
@@ -37,6 +39,9 @@ __all__ = [
     "jura_connect_xml_dir",
     "load_definition",
     "parse_definition_xml",
+    "product_prefs",
+    "remember_param",
+    "selection_for_product",
 ]
 
 

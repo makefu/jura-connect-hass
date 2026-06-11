@@ -115,3 +115,80 @@ async def test_write_setting_backend_error_raises_update_failed(mock_backend, fa
     mock_backend.write_setting.side_effect = JuraBackendError("rejection")
     with pytest.raises(UpdateFailed):
         await coordinator.write_setting("hardness", "18")
+
+
+# ---------------------------------------------------------------------------
+# Persistent per-product brew preferences
+# ---------------------------------------------------------------------------
+
+
+async def test_async_load_brew_prefs_starts_empty(mock_backend, fake_config_entry):
+    coordinator = _make_coordinator(mock_backend, fake_config_entry)
+    await coordinator.async_load_brew_prefs()
+    assert coordinator.brew_prefs == {}
+
+
+async def test_save_brew_prefs_is_noop_without_a_store(mock_backend, fake_config_entry):
+    """Before async_load_brew_prefs wires a Store, saving must not raise."""
+    coordinator = _make_coordinator(mock_backend, fake_config_entry)
+    await coordinator.save_brew_prefs()  # must not raise
+    assert coordinator.brew_prefs == {}
+
+
+async def test_set_brew_param_updates_selection_and_prefs(mock_backend, fake_config_entry):
+    """A param change stages the value AND records it for the current product."""
+    coordinator = _make_coordinator(mock_backend, fake_config_entry)
+    await coordinator.async_load_brew_prefs()
+    coordinator.select_brew_product("03")
+    coordinator.set_brew_param("water_ml", 130)
+    assert coordinator.brew_selection["water_ml"] == 130
+    assert coordinator.brew_prefs["03"]["water_ml"] == 130
+
+
+def test_set_brew_param_factory_default_records_none(mock_backend, fake_config_entry):
+    coordinator = _make_coordinator(mock_backend, fake_config_entry)
+    coordinator.select_brew_product("03")
+    coordinator.set_brew_param("water_ml", 130)
+    coordinator.set_brew_param("water_ml", None)  # Factory Default
+    assert coordinator.brew_selection["water_ml"] is None
+    assert coordinator.brew_prefs["03"]["water_ml"] is None
+
+
+def test_select_brew_product_loads_saved_prefs_into_selection(mock_backend, fake_config_entry):
+    """Switching product hydrates the staged selection from that product's prefs."""
+    coordinator = _make_coordinator(mock_backend, fake_config_entry)
+    coordinator.brew_prefs["03"] = {"strength": 2, "water_ml": 130, "temp": 1}
+    coordinator.select_brew_product("03")
+    assert coordinator.brew_selection == {
+        "product": "03",
+        "strength": 2,
+        "water_ml": 130,
+        "temp": 1,
+    }
+
+
+def test_select_brew_product_without_prefs_is_all_factory_default(mock_backend, fake_config_entry):
+    coordinator = _make_coordinator(mock_backend, fake_config_entry)
+    coordinator.brew_selection.update(strength=4, water_ml=120, temp=2)
+    coordinator.select_brew_product("03")  # no saved prefs for 03
+    assert coordinator.brew_selection == {
+        "product": "03",
+        "strength": None,
+        "water_ml": None,
+        "temp": None,
+    }
+
+
+async def test_brew_prefs_persist_across_coordinator_restarts(mock_backend, fake_config_entry):
+    """The net contract: set a pref, restart (new coordinator), it's remembered."""
+    c1 = _make_coordinator(mock_backend, fake_config_entry)
+    await c1.async_load_brew_prefs()
+    c1.select_brew_product("03")
+    c1.set_brew_param("water_ml", 130)
+    await c1.save_brew_prefs()
+
+    c2 = _make_coordinator(mock_backend, fake_config_entry)
+    await c2.async_load_brew_prefs()
+    assert c2.brew_prefs["03"]["water_ml"] == 130
+    c2.select_brew_product("03")
+    assert c2.brew_selection["water_ml"] == 130

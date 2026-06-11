@@ -56,11 +56,11 @@ def _brew_handler(hass):
 # ---------------------------------------------------------------------------
 
 
-def test_descale_and_decalc_both_registered():
+def test_descale_registered_and_decalc_removed():
     hass = _hass_with_coordinator(_mock_coordinator())
     _register_services(hass)
     assert (DOMAIN, "descale") in hass.services._registered
-    assert (DOMAIN, "decalc") in hass.services._registered
+    assert (DOMAIN, "decalc") not in hass.services._registered
 
 
 async def test_descale_dispatches_library_decalc_command():
@@ -68,17 +68,6 @@ async def test_descale_dispatches_library_decalc_command():
     hass = _hass_with_coordinator(coordinator)
     _register_services(hass)
     handler = hass.services._registered[(DOMAIN, "descale")]["handler"]
-    call = MagicMock()
-    call.data = {"config_entry_id": "test_entry_id"}
-    await handler(call)
-    coordinator.run_command.assert_awaited_once_with("decalc", [], allow_destructive=True)
-
-
-async def test_decalc_alias_still_dispatches_decalc_command():
-    coordinator = _mock_coordinator()
-    hass = _hass_with_coordinator(coordinator)
-    _register_services(hass)
-    handler = hass.services._registered[(DOMAIN, "decalc")]["handler"]
     call = MagicMock()
     call.data = {"config_entry_id": "test_entry_id"}
     await handler(call)

@@ -38,7 +38,6 @@ if _HAS_HOMEASSISTANT:
     SERVICE_BREW = "brew"
     SERVICE_CLEAN = "clean"
     SERVICE_DESCALE = "descale"
-    SERVICE_DECALC = "decalc"  # legacy alias of descale (back-compat)
     SERVICE_FILTER_CHANGE = "filter_change"
     SERVICE_CAPPU_RINSE = "cappu_rinse"
     SERVICE_CAPPU_CLEAN = "cappu_clean"
@@ -48,15 +47,12 @@ if _HAS_HOMEASSISTANT:
     # Map HA service name -> jura_connect command name. Every entry runs with
     # ``allow_destructive=True`` because the user invoked the dedicated service
     # explicitly; the named service *is* the opt-in. ``descale`` is the
-    # user-facing name for the library's ``decalc`` command; ``decalc`` is
-    # kept as a backwards-compatible alias so existing automations keep
-    # working.
+    # user-facing name for the library's ``decalc`` command.
     _COMMAND_SERVICES: dict[str, str] = {
         SERVICE_LOCK_SCREEN: "lock",
         SERVICE_UNLOCK_SCREEN: "unlock",
         SERVICE_CLEAN: "clean",
         SERVICE_DESCALE: "decalc",
-        SERVICE_DECALC: "decalc",
         SERVICE_FILTER_CHANGE: "filter-change",
         SERVICE_CAPPU_RINSE: "cappu-rinse",
         SERVICE_CAPPU_CLEAN: "cappu-clean",

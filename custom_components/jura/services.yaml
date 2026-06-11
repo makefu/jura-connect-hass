@@ -129,20 +129,6 @@ descale:
         entity:
           integration: jura
 
-decalc:
-  name: Descale (legacy alias)
-  description: Deprecated alias of the Descale service. Start the descaling cycle (30+ min, requires descaler in tank).
-  fields:
-    config_entry_id:
-      name: Config Entry ID
-      selector:
-        text:
-    entity_id:
-      name: Entity
-      selector:
-        entity:
-          integration: jura
-
 filter_change:
   name: Filter Change
   description: Run the water-filter change procedure.

@@ -1,9 +1,18 @@
-"""Select platform: one dropdown per pick-from-N machine setting.
+"""Select platform: machine-setting dropdowns + the brew control panel.
 
-Covers SettingDef kinds ``switch``, ``combobox`` and ``item_slider`` —
-all of which present a fixed list of named choices on the machine.
-``step_slider`` settings (hardness) are handled by the ``number``
-platform instead.
+Two families of selects live here:
+
+* **Setting selects** — one dropdown per pick-from-N machine setting
+  (SettingDef kinds ``switch``, ``combobox`` and ``item_slider``).
+  ``step_slider`` settings (hardness) are handled by the ``number``
+  platform instead.
+* **Brew control panel** — a small, machine-wide set that stages the
+  *next* brew: a product picker plus strength / water / temperature
+  selects. Each parameter select carries a ``"Machine Default"`` option
+  (meaning "let the machine use the selected product's own default") and
+  recomputes its options from whichever product is currently selected.
+  None of them talk to the machine; the brew button reads the staged
+  ``coordinator.brew_selection`` and encodes the ``@TP:`` start command.
 """
 
 from __future__ import annotations
@@ -16,7 +25,7 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .brew import ProductArg, ProductDef, jura_connect_xml_dir, load_definition
+from .brew import ProductArg
 from .const import CONF_MACHINE_TYPE, DOMAIN
 from .coordinator import JuraCoordinator
 from .entity import JuraEntity
@@ -25,12 +34,8 @@ _LOGGER = logging.getLogger(__name__)
 
 SELECT_KINDS = {"switch", "combobox", "item_slider"}
 
-# Brew-parameter SelectEntity kinds: which product argument maps to which
-# coordinator.brew_params key and entity-name suffix.
-_BREW_SELECT_PARAMS = {
-    "COFFEE_STRENGTH": ("strength", "strength"),
-    "TEMPERATURE": ("temp", "temperature"),
-}
+# Sentinel option meaning "don't override — use the product's machine default".
+MACHINE_DEFAULT = "Machine Default"
 
 
 async def async_setup_entry(
@@ -45,7 +50,7 @@ async def async_setup_entry(
 
     entities: list[SelectEntity] = []
     entities.extend(_setting_select_entities(coordinator, config_entry, machine_type))
-    entities.extend(_brew_param_select_entities(coordinator, config_entry, machine_type))
+    entities.extend(_brew_select_entities(coordinator, config_entry))
     async_add_entities(entities)
 
 
@@ -77,24 +82,24 @@ def _setting_select_entities(
     return entities
 
 
-def _brew_param_select_entities(
-    coordinator: JuraCoordinator, config_entry: ConfigEntry, machine_type: str
-) -> list[SelectEntity]:
-    """Build per-product strength + temperature selects from the machine def."""
-    base_dir = jura_connect_xml_dir()
-    if base_dir is None:
-        return []
-    definition = load_definition(machine_type, base_dir=base_dir)
-    if definition is None:
-        _LOGGER.warning("no machine definition for %s; skipping brew param selects", machine_type)
+def _brew_select_entities(coordinator: JuraCoordinator, config_entry: ConfigEntry) -> list[SelectEntity]:
+    """Build the machine-wide brew control panel (product + parameter selects).
+
+    A parameter select is created when *any* product on the machine exposes
+    that argument; it then toggles availability per the currently-selected
+    product (e.g. strength is unavailable while hot water is selected).
+    """
+    definition = coordinator.brew_definition
+    if definition is None or not definition.products:
         return []
 
-    entities: list[SelectEntity] = []
-    for product in definition.products:
-        for kind in _BREW_SELECT_PARAMS:
-            arg = product.arg(kind)
-            if arg is not None and arg.items:
-                entities.append(BrewParamSelect(coordinator, config_entry, product, arg))
+    entities: list[SelectEntity] = [BrewProductSelect(coordinator, config_entry)]
+    if any(product.arg("COFFEE_STRENGTH") for product in definition.products):
+        entities.append(BrewStrengthSelect(coordinator, config_entry))
+    if any(product.arg("WATER_AMOUNT") for product in definition.products):
+        entities.append(BrewWaterSelect(coordinator, config_entry))
+    if any(product.arg("TEMPERATURE") for product in definition.products):
+        entities.append(BrewTempSelect(coordinator, config_entry))
     return entities
 
 
@@ -133,43 +138,189 @@ class SettingSelectEntity(JuraEntity, SelectEntity):
         await self.coordinator.write_setting(self._setting.name, option)
 
 
-class BrewParamSelect(JuraEntity, SelectEntity):
-    """Stages a per-product brew parameter (coffee strength or temperature).
+class BrewProductSelect(JuraEntity, SelectEntity):
+    """Picks which product the brew button (and parameter selects) act on.
 
-    A CONFIG entity that holds the value to use on the *next* brew of its
-    product; it never talks to the machine. The chosen byte value lives on
-    ``coordinator.brew_params[product.code]`` so the brew button can read
-    it. Options and the seeded default come from the product's XML argument.
+    Selecting a product stores its Code on ``coordinator.brew_selection``
+    and resets strength/water/temperature back to "Machine Default" — the
+    previous parameter values rarely make sense for a different drink. It
+    then asks the coordinator to refresh listeners so the dependent
+    parameter selects re-render their (product-specific) options.
     """
 
     _attr_entity_category = EntityCategory.CONFIG
 
-    def __init__(
-        self,
-        coordinator: JuraCoordinator,
-        config_entry: ConfigEntry,
-        product: ProductDef,
-        arg: ProductArg,
-    ) -> None:
+    def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry) -> None:
         super().__init__(coordinator, config_entry)
-        self._product = product
-        self._arg = arg
-        self._param_key, label = _BREW_SELECT_PARAMS[arg.kind]
-        self._value_by_name = {name: value for name, value in arg.items}
-        self._name_by_value = {value: name for name, value in arg.items}
-        self._attr_name = f"{product.name} {label}"
-        self._attr_unique_id = f"{DOMAIN}_{self._slug}_brew_{product.code}_{self._param_key}"
-        self._attr_options = [name for name, _ in arg.items]
-        coordinator.brew_params.setdefault(product.code, {}).setdefault(self._param_key, arg.default)
+        self._attr_name = "Brew Product"
+        self._attr_unique_id = f"{DOMAIN}_{self._slug}_brew_product"
+
+    @property
+    def options(self) -> list[str]:
+        definition = self.coordinator.brew_definition
+        if definition is None:
+            return []
+        return [product.name for product in definition.products]
+
+    @property
+    def available(self) -> bool:
+        return bool(self.options)
 
     @property
     def current_option(self) -> str | None:
-        value = self.coordinator.brew_params.get(self._product.code, {}).get(self._param_key, self._arg.default)
-        return self._name_by_value.get(value)
+        product = self.coordinator.selected_product()
+        return product.name if product is not None else None
 
     async def async_select_option(self, option: str) -> None:
-        value = self._value_by_name.get(option)
+        definition = self.coordinator.brew_definition
+        if definition is None:
+            return
+        for product in definition.products:
+            if product.name == option:
+                self.coordinator.brew_selection.update(
+                    product=product.code,
+                    strength=None,
+                    water_ml=None,
+                    temp=None,
+                )
+                # Refresh the whole panel: the parameter selects' options and
+                # values depend on the now-current product.
+                self.coordinator.async_update_listeners()
+                return
+
+
+class _BrewParamSelect(JuraEntity, SelectEntity):
+    """Base for a brew parameter select bound to the *currently-selected* product.
+
+    Subclasses bind to one product argument kind (strength / water /
+    temperature). Options always lead with :data:`MACHINE_DEFAULT`; the
+    value lives on ``coordinator.brew_selection[<key>]`` where ``None``
+    means "machine default". The select is unavailable while the selected
+    product doesn't expose the argument.
+    """
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _arg_kind: str
+    _selection_key: str
+    _name_suffix: str
+
+    def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry) -> None:
+        super().__init__(coordinator, config_entry)
+        self._attr_name = f"Brew {self._name_suffix}"
+        self._attr_unique_id = f"{DOMAIN}_{self._slug}_brew_{self._selection_key}"
+
+    def _arg(self) -> ProductArg | None:
+        product = self.coordinator.selected_product()
+        return product.arg(self._arg_kind) if product is not None else None
+
+    @property
+    def available(self) -> bool:
+        return self._arg() is not None
+
+    @property
+    def options(self) -> list[str]:
+        arg = self._arg()
+        if arg is None:
+            return [MACHINE_DEFAULT]
+        return [MACHINE_DEFAULT, *self._value_options(arg)]
+
+    @property
+    def current_option(self) -> str | None:
+        arg = self._arg()
+        if arg is None:
+            return None
+        value = self.coordinator.brew_selection.get(self._selection_key)
+        if value is None:
+            return MACHINE_DEFAULT
+        return self._option_for_value(arg, value)
+
+    async def async_select_option(self, option: str) -> None:
+        if option == MACHINE_DEFAULT:
+            self.coordinator.brew_selection[self._selection_key] = None
+            self.async_write_ha_state()
+            return
+        arg = self._arg()
+        if arg is None:
+            return
+        value = self._value_for_option(arg, option)
         if value is None:
             return
-        self.coordinator.brew_params.setdefault(self._product.code, {})[self._param_key] = value
+        self.coordinator.brew_selection[self._selection_key] = value
         self.async_write_ha_state()
+
+    # --- per-kind value <-> option mapping -------------------------------
+    def _value_options(self, arg: ProductArg) -> list[str]:
+        raise NotImplementedError
+
+    def _value_for_option(self, arg: ProductArg, option: str) -> int | None:
+        raise NotImplementedError
+
+    def _option_for_value(self, arg: ProductArg, value: int) -> str | None:
+        raise NotImplementedError
+
+
+class _ItemBrewSelect(_BrewParamSelect):
+    """Brew parameter backed by a fixed list of named ITEMs (strength/temperature)."""
+
+    def _value_options(self, arg: ProductArg) -> list[str]:
+        return [name for name, _ in arg.items]
+
+    def _value_for_option(self, arg: ProductArg, option: str) -> int | None:
+        for name, value in arg.items:
+            if name == option:
+                return value
+        return None
+
+    def _option_for_value(self, arg: ProductArg, value: int) -> str | None:
+        for name, candidate in arg.items:
+            if candidate == value:
+                return name
+        return None
+
+
+class BrewStrengthSelect(_ItemBrewSelect):
+    """Coffee strength for the next brew (e.g. 1..10), or machine default."""
+
+    _arg_kind = "COFFEE_STRENGTH"
+    _selection_key = "strength"
+    _name_suffix = "Strength"
+
+
+class BrewTempSelect(_ItemBrewSelect):
+    """Temperature for the next brew (e.g. Low/Normal/High), or machine default."""
+
+    _arg_kind = "TEMPERATURE"
+    _selection_key = "temp"
+    _name_suffix = "Temperature"
+
+
+class BrewWaterSelect(_BrewParamSelect):
+    """Water amount (mL) for the next brew, or machine default.
+
+    A select (rather than a number) so it can carry the ``Machine Default``
+    sentinel; its options are the product's ``min..max`` range in ``step``
+    increments.
+    """
+
+    _arg_kind = "WATER_AMOUNT"
+    _selection_key = "water_ml"
+    _name_suffix = "Water"
+
+    @staticmethod
+    def _ml_range(arg: ProductArg) -> range:
+        low = arg.min if arg.min is not None else 0
+        high = arg.max if arg.max is not None else low
+        step = arg.step or 1
+        return range(low, high + 1, step)
+
+    def _value_options(self, arg: ProductArg) -> list[str]:
+        return [str(ml) for ml in self._ml_range(arg)]
+
+    def _value_for_option(self, arg: ProductArg, option: str) -> int | None:
+        try:
+            return int(option)
+        except ValueError:
+            return None
+
+    def _option_for_value(self, arg: ProductArg, value: int) -> str | None:
+        return str(value)

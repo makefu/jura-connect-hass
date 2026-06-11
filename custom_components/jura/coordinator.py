@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .backends.base import JuraAuthError, JuraBackend, JuraBackendError, MachineSnapshot
 from .backends.jura import JuraConnectBackend
+from .brew import MachineDefinition, ProductDef, jura_connect_xml_dir, load_definition
 from .const import (
     CONF_AUTH_HASH,
     CONF_CONN_ID,
@@ -49,12 +50,52 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
             config_entry=config_entry,
         )
         self.backend: JuraBackend = backend or self._build_backend(config_entry)
-        # Staged "next brew" parameters per product code, e.g.
-        # ``{"30": {"strength": 8, "water_ml": 90, "temp": 2}}``. The brew
-        # parameter entities (select/number) write here; the brew button
-        # reads from here. Purely local — nothing is sent to the machine
-        # until the user presses the button or calls the brew service.
-        self.brew_params: dict[str, dict[str, int]] = {}
+        # The machine's brewable-product table (from jura_connect's bundled
+        # XMLs), loaded once so the brew control-panel entities and the brew
+        # button can resolve products + argument ranges without re-parsing.
+        self.brew_definition: MachineDefinition | None = self._load_brew_definition(config_entry)
+        # The single staged "next brew" selection shared by the whole machine.
+        # ``product`` is a product Code; ``None`` for a parameter means "use
+        # the machine's own default for the selected product". The brew
+        # control-panel selects write here; the brew button reads from here.
+        # Purely local — nothing is sent to the machine until the user presses
+        # the button or calls the brew service.
+        self.brew_selection: dict[str, int | str | None] = {
+            "product": None,
+            "strength": None,
+            "water_ml": None,
+            "temp": None,
+        }
+        if self.brew_definition is not None and self.brew_definition.products:
+            self.brew_selection["product"] = self.brew_definition.products[0].code
+
+    @staticmethod
+    def _load_brew_definition(config_entry: ConfigEntry) -> MachineDefinition | None:
+        """Resolve + parse the machine's product definition, or ``None``.
+
+        A missing ``jura_connect`` package / unknown machine type is a
+        configuration / version-skew condition, not a hard error: the brew
+        control panel simply isn't created.
+        """
+        machine_type = config_entry.data.get(CONF_MACHINE_TYPE)
+        if not machine_type:
+            return None
+        base_dir = jura_connect_xml_dir()
+        if base_dir is None:
+            return None
+        return load_definition(machine_type, base_dir=base_dir)
+
+    def selected_product(self) -> ProductDef | None:
+        """Return the currently-selected :class:`ProductDef`, or ``None``."""
+        if self.brew_definition is None:
+            return None
+        code = self.brew_selection.get("product")
+        if code is None:
+            return None
+        for product in self.brew_definition.products:
+            if product.code == code:
+                return product
+        return None
 
     @staticmethod
     def _build_backend(config_entry: ConfigEntry) -> JuraBackend:

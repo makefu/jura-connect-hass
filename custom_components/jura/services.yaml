@@ -62,7 +62,7 @@ brew:
       name: Product
       description: >-
         Product name from the machine's product table (e.g. "Espresso").
-        See the "Brew <product>" buttons for the valid names on your model.
+        See the "Brew Product" select for the valid names on your model.
         Mutually exclusive with recipe.
       example: Espresso
       selector:

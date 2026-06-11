@@ -257,6 +257,11 @@ class DataUpdateCoordinator:
         self.data = data
         self.last_update_success = True
 
+    def async_update_listeners(self):
+        # Real HA pushes a state update to every registered CoordinatorEntity;
+        # entities in tests read coordinator state live, so this is a no-op.
+        pass
+
     async def _async_update_data(self):
         raise NotImplementedError
 

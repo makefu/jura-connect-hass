@@ -56,6 +56,13 @@ declaration; Nix users get it pinned via the flake input.
   Allowed: german=01, english=02, …" message rather than a backend error.
 - **`number.*`** entities for step-slider settings (currently water
   hardness on EF1091) with the min/max/step pulled from the profile XML.
+- **Brew control panel** — a compact, machine-wide set of controls for the
+  next brew: a **Brew Product** select, plus **Brew Strength**, **Brew Water**
+  and **Brew Temperature** selects (each offering "Machine Default" alongside
+  the product's own options/range), and a single **Brew** button. Picking a
+  product re-scopes the parameter selects to that drink and resets them to the
+  machine default; parameters a product doesn't support (e.g. strength for hot
+  water) go unavailable. Pressing **Brew** physically brews the staged drink.
 
 ### Diagnostics (collapsed by default)
 

@@ -90,6 +90,11 @@ class _FakeHass:
 
         return asyncio.ensure_future(coro)
 
+    async def async_add_executor_job(self, func, *args):
+        # Tests run synchronously; just call inline. Real hass offloads
+        # the blocking call to a thread pool.
+        return func(*args)
+
 
 class ConfigFlow(metaclass=_ConfigFlowMeta):
     DOMAIN: str | None = None

@@ -16,6 +16,33 @@ simulator = pytest.importorskip("jura_connect.simulator")
 from custom_components.jura.backends.jura import JuraConnectBackend  # noqa: E402
 
 
+def test_odd_length_status_frame_is_tolerated():
+    """Regression for #3: the J8 (NAA) emits a ``@TF:`` status frame whose
+    hex body has an odd number of nibbles. That used to crash the first
+    poll with "fromhex() arg must contain an even number of hexadecimal
+    digits", so the config entry never became ready. Importing the
+    backend installs a tolerant ``_hex_body`` shim that pads the odd
+    nibble so the frame decodes instead of raising.
+    """
+    # Importing the backend module (done at file top) installs the shim.
+    from jura_connect import MachineStatus
+
+    # 5 nibbles after the prefix -> odd. Must not raise; leading bytes
+    # (0x0F, 0xF0) still decode, the stray nibble is zero-padded.
+    status = MachineStatus.parse("@TF:0FF0F")
+    assert isinstance(status.active_alerts, tuple)
+
+
+def test_backend_init_defers_profile_load():
+    """Constructing the backend must not touch the filesystem (the XML
+    profile load) — that has to happen lazily in a worker thread so it
+    never blocks the event loop during coordinator setup (#3).
+    """
+    backend = JuraConnectBackend("1.2.3.4", conn_id="x", machine_type="EF1091")
+    assert backend._profile is None
+    assert backend._profile_resolved is False
+
+
 @pytest.fixture
 def running_simulator():
     cfg = simulator.SimulatorConfig(

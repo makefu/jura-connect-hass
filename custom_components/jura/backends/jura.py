@@ -38,6 +38,49 @@ from .base import (
 _LOGGER = logging.getLogger(__name__)
 
 
+# --------------------------------------------------------------------- #
+# Compatibility shim: tolerate odd-length hex frame bodies
+# --------------------------------------------------------------------- #
+# Some machines (notably the J8 NAA) emit a ``@TF:`` status frame whose
+# hex body has an odd number of nibbles. jura_connect's ``_hex_body``
+# feeds that straight into ``bytes.fromhex()``, which raises
+# "non-even number of hex digits" and aborts the very first poll — so
+# the config entry never finishes loading and just retries forever.
+# See https://github.com/makefu/jura-connect-hass/issues/3.
+#
+# Pad an odd body with a trailing "0" nibble before parsing. The frame is
+# a left-to-right byte sequence, so the stray nibble is the high half of
+# an incomplete final byte; completing it with a zero low-nibble keeps
+# every leading byte (where the status bits live) byte-aligned and only
+# zero-fills four trailing bits the machine never sent. ``MachineStatus``
+# and the maintenance readers all look ``_hex_body`` up as a module
+# global at call time, so patching it on the module object reaches every
+# call site without touching the library's source.
+try:
+    import jura_connect.client as _jc_client
+
+    _orig_hex_body = getattr(_jc_client, "_hex_body", None)
+    if _orig_hex_body is not None and not getattr(_orig_hex_body, "_tolerates_odd", False):
+
+        def _tolerant_hex_body(reply: str, expected_prefix: str) -> bytes:
+            body = reply.strip()
+            if body.lower().startswith(expected_prefix.lower()):
+                tail = body[len(expected_prefix) :]
+                if len(tail) % 2 == 1:
+                    _LOGGER.debug(
+                        "odd-length hex body for %s (%d nibbles), padding with trailing 0",
+                        expected_prefix,
+                        len(tail),
+                    )
+                    reply = body + "0"
+            return _orig_hex_body(reply, expected_prefix)
+
+        _tolerant_hex_body._tolerates_odd = True  # type: ignore[attr-defined]
+        _jc_client._hex_body = _tolerant_hex_body
+except ImportError:  # pragma: no cover - jura_connect always present at runtime
+    pass
+
+
 def _resolve_profile_and_name(machine_type: str | None) -> tuple[MachineProfile | None, str | None]:
     """Load the per-machine profile + look up its friendly name.
 
@@ -85,7 +128,23 @@ class JuraConnectBackend(JuraBackend):
         self.machine_type = machine_type or None
         self.connect_timeout = connect_timeout
         self.read_timeout = read_timeout
+        # Profile resolution reads bundled XML files off disk. Defer it to
+        # the first worker-thread operation so building the backend on the
+        # event loop (coordinator setup) never blocks — see #3.
+        self._profile: MachineProfile | None = None
+        self._machine_type_name: str | None = None
+        self._profile_resolved = False
+
+    def _ensure_profile(self) -> None:
+        """Lazily resolve the profile + friendly name (blocking file I/O).
+
+        Only ever called from ``asyncio.to_thread`` bodies, so the XML
+        read stays off the event loop. Idempotent.
+        """
+        if self._profile_resolved:
+            return
         self._profile, self._machine_type_name = _resolve_profile_and_name(self.machine_type)
+        self._profile_resolved = True
 
     def _make_client(self) -> JuraClient:
         return JuraClient(
@@ -101,6 +160,7 @@ class JuraConnectBackend(JuraBackend):
 
     async def pair(self, on_prompt: Callable[[str], None] | None = None) -> str:
         def _do() -> str:
+            self._ensure_profile()
             client = self._make_client()
             try:
                 result = client.pair(on_user_prompt=on_prompt)
@@ -122,6 +182,7 @@ class JuraConnectBackend(JuraBackend):
 
     async def fetch(self) -> MachineSnapshot:
         def _do() -> MachineSnapshot:
+            self._ensure_profile()
             client = self._make_client()
             try:
                 handshake = client.connect()
@@ -211,12 +272,13 @@ class JuraConnectBackend(JuraBackend):
         suffix (writing ``211E`` reads back ``1E``); the caller's
         :meth:`SettingDef.item_from_hex` resolves it for display.
         """
-        if self._profile is None:
-            raise JuraBackendError("no machine profile loaded; cannot write settings")
-        if self._profile.setting_by_name.get(name) is None:
-            raise JuraBackendError(f"setting {name!r} not in profile {self._profile.code}")
 
         def _do() -> str:
+            self._ensure_profile()
+            if self._profile is None:
+                raise JuraBackendError("no machine profile loaded; cannot write settings")
+            if self._profile.setting_by_name.get(name) is None:
+                raise JuraBackendError(f"setting {name!r} not in profile {self._profile.code}")
             client = self._make_client()
             try:
                 handshake = client.connect()
@@ -251,6 +313,7 @@ class JuraConnectBackend(JuraBackend):
         arg_tuple = tuple(args)
 
         def _do() -> dict[str, Any]:
+            self._ensure_profile()
             client = self._make_client()
             try:
                 handshake = client.connect()

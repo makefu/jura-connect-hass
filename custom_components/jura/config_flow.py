@@ -265,8 +265,11 @@ class JuraConfigFlow(ConfigFlow, domain=DOMAIN):
             self._connection[CONF_MACHINE_TYPE] = None if choice == MACHINE_TYPE_NONE else choice
             return await self.async_step_finish()
 
+        # known_machine_names walks the bundled XML catalogue off disk —
+        # run it in the executor so the config-flow step doesn't block.
+        names = await self.hass.async_add_executor_job(known_machine_names)
         options: dict[str, str] = {MACHINE_TYPE_NONE: "Use baseline (no profile)"}
-        for friendly, code in known_machine_names():
+        for friendly, code in names:
             options[code] = f"{friendly} [{code}]"
 
         default = self._auto_machine_type if self._auto_machine_type in options else MACHINE_TYPE_NONE

@@ -43,7 +43,8 @@ async def async_setup_entry(
     except ImportError:  # pragma: no cover
         return
     try:
-        profile = load_profile(machine_type)
+        # load_profile reads bundled XML off disk — keep it off the loop.
+        profile = await hass.async_add_executor_job(load_profile, machine_type)
     except KeyError:
         _LOGGER.warning("no profile for machine_type %s; skipping select setup", machine_type)
         return

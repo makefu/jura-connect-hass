@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import errno
 import logging
 from datetime import timedelta
 from typing import Any
@@ -28,6 +29,67 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Sentinel surfaced in MachineSnapshot.handshake_state when the machine
+# is powered off / unreachable. Entities that care about reachability
+# (ConnectivityBinarySensor) key off this value.
+HANDSHAKE_STATE_OFFLINE = "OFFLINE"
+
+# errno values that mean "the machine isn't answering" — connection
+# refused, host/network unreachable, timeouts. Anything else (EACCES,
+# EBADF, …) is a programming error and should still surface as
+# UpdateFailed so HA logs and retries it loudly.
+_OFFLINE_ERRNOS: frozenset[int] = frozenset(
+    {
+        errno.ECONNREFUSED,
+        errno.ECONNRESET,
+        errno.ECONNABORTED,
+        errno.ETIMEDOUT,
+        errno.EHOSTUNREACH,
+        errno.ENETUNREACH,
+        errno.EHOSTDOWN,
+        errno.ENETDOWN,
+        errno.ENOTCONN,
+    }
+)
+
+# Substrings used as a last-resort classifier when the cause chain has
+# been stripped (defensive — the backend currently re-raises ``from err``
+# so the typed path covers both library-raised TimeoutError and
+# socket-level OSError).
+_OFFLINE_MESSAGE_HINTS: tuple[str, ...] = (
+    "no reply to",
+    "timed out",
+    "timeout",
+    "connection refused",
+    "no route to host",
+    "host is down",
+    "network is unreachable",
+)
+
+
+def _is_offline_error(err: BaseException) -> bool:
+    """True if ``err`` represents an unreachable / powered-down machine.
+
+    Walks the ``__cause__`` chain — the backend wraps OSError /
+    TimeoutError (both the socket-level ``timed out`` and the
+    library-level ``no reply to '@HU?' within 6.0s``) into a
+    JuraBackendError via ``raise ... from err``, so the original type
+    is preserved on ``__cause__``.
+    """
+    seen: set[int] = set()
+    cur: BaseException | None = err
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if isinstance(cur, TimeoutError):
+            return True
+        if isinstance(cur, ConnectionError):
+            return True
+        if isinstance(cur, OSError) and cur.errno in _OFFLINE_ERRNOS:
+            return True
+        cur = cur.__cause__ or cur.__context__
+    text = str(err).lower()
+    return any(hint in text for hint in _OFFLINE_MESSAGE_HINTS)
 
 
 class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
@@ -75,12 +137,37 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
             machine_type=data.get(CONF_MACHINE_TYPE),
         )
 
+    def _offline_snapshot(self) -> MachineSnapshot:
+        """Synthesise an OFFLINE snapshot.
+
+        Reuses the prior snapshot (counters, brews, settings, identity)
+        when one exists so entities keep showing last-known values, and
+        flips ``handshake_state`` to the OFFLINE sentinel so the
+        connectivity binary_sensor can surface the reachability flip.
+        On the very first poll (no prior data) we return a minimal
+        snapshot keyed by the configured address + conn_id.
+        """
+        prior = self.data
+        if prior is not None:
+            return dataclasses.replace(prior, handshake_state=HANDSHAKE_STATE_OFFLINE)
+        data = self.config_entry.data
+        return MachineSnapshot(
+            address=data.get(CONF_HOST, ""),
+            conn_id=data.get(CONF_CONN_ID, ""),
+            handshake_state=HANDSHAKE_STATE_OFFLINE,
+            active_alerts=(),
+            machine_type=data.get(CONF_MACHINE_TYPE),
+        )
+
     async def _async_update_data(self) -> MachineSnapshot:
         try:
             return await self.backend.fetch()
         except JuraAuthError as err:
             raise ConfigEntryAuthFailed(f"authentication failed: {err}") from err
         except JuraBackendError as err:
+            if _is_offline_error(err):
+                _LOGGER.debug("machine unreachable, surfacing OFFLINE snapshot: %s", err)
+                return self._offline_snapshot()
             raise UpdateFailed(f"backend error: {err}") from err
         except Exception as err:  # noqa: BLE001
             raise UpdateFailed(f"unexpected error: {err}") from err

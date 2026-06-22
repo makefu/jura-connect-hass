@@ -19,6 +19,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import CONF_MACHINE_TYPE, DOMAIN
 from .coordinator import JuraCoordinator
 from .entity import JuraEntity
+from .i18n import get_translator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,7 +72,8 @@ class SettingSelectEntity(JuraEntity, SelectEntity):
     def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry, setting_def) -> None:
         super().__init__(coordinator, config_entry)
         self._setting = setting_def
-        self._attr_name = f"Setting {setting_def.name.replace('_', ' ')}"
+        translator = get_translator()
+        self._attr_name = translator.format_entity_name("Setting {name}", name=setting_def.name)
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_setting_{setting_def.name}"
         self._attr_options = [item.name for item in setting_def.items]
 

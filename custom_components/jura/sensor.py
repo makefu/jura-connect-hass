@@ -20,6 +20,7 @@ from .const import (
 )
 from .coordinator import JuraCoordinator
 from .entity import JuraEntity
+from .i18n import get_translator
 from .serializers import percent_value, serialize_snapshot
 
 
@@ -79,11 +80,12 @@ def _derive_state(active_alerts: tuple[str, ...]) -> str:
 class StateSensor(JuraEntity, SensorEntity):
     """Overall machine state derived from the active alert bits."""
 
-    _attr_name = "Status"
     _attr_icon = "mdi:coffee-maker"
 
     def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry) -> None:
         super().__init__(coordinator, config_entry)
+        translator = get_translator()
+        self._attr_name = translator.get_entity_name("sensor", "status", "Status")
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_state"
 
     @property
@@ -121,9 +123,11 @@ class CounterSensor(JuraEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator, config_entry)
         self._key = key
+        translator = get_translator()
         # The "Cycles" prefix groups all counter entities together when
         # the device card sorts entities alphabetically within a category.
-        self._attr_name = f"Cycles {key.replace('_', ' ')}"
+        counter_name = translator.get_counter_name(key)
+        self._attr_name = f"Cycles {counter_name}"
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_counter_{key}"
 
     @property
@@ -152,8 +156,10 @@ class PercentSensor(JuraEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator, config_entry)
         self._key = key
+        translator = get_translator()
         # "Service" prefix clusters the three percent indicators together.
-        self._attr_name = f"Service {key.replace('_', ' ')} level"
+        percent_name = translator.get_percent_name(key)
+        self._attr_name = f"Service {percent_name} level"
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_percent_{key}"
 
     @property
@@ -187,9 +193,10 @@ class BrewCounterSensor(JuraEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator, config_entry)
         self._product = product_name
+        translator = get_translator()
         # "Brew" prefix clusters all per-recipe counters next to each other
         # and to the BrewTotalSensor on the device card.
-        self._attr_name = f"Brew {product_name.replace('_', ' ')}"
+        self._attr_name = translator.format_entity_name("Brew {product}", product=product_name)
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_brews_{product_name}"
 
     @property
@@ -203,14 +210,15 @@ class BrewCounterSensor(JuraEntity, SensorEntity):
 class BrewTotalSensor(JuraEntity, SensorEntity):
     """Lifetime total brews across all recipes (slot 0 of the @TR:32 table)."""
 
-    # Named so it sorts at the end of the "Brew …" group on the device card.
-    _attr_name = "Brew total"
     _attr_icon = "mdi:counter"
     _attr_native_unit_of_measurement = "brews"
     _attr_state_class = "total_increasing"
 
     def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry) -> None:
         super().__init__(coordinator, config_entry)
+        translator = get_translator()
+        # Named so it sorts at the end of the "Brew …" group on the device card.
+        self._attr_name = translator.get_entity_name("sensor", "brew_total", "Brew total")
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_brews_total"
 
     @property
@@ -230,12 +238,13 @@ class MachineTypeSensor(JuraEntity, SensorEntity):
     changes again.
     """
 
-    _attr_name = "Machine type"
     _attr_icon = "mdi:coffee-maker-outline"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry) -> None:
         super().__init__(coordinator, config_entry)
+        translator = get_translator()
+        self._attr_name = translator.get_entity_name("sensor", "machine_type", "Machine type")
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_machine_type"
 
     @property

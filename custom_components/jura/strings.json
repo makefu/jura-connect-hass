@@ -57,5 +57,69 @@
         "abort": {
             "already_configured": "This machine is already configured."
         }
+    },
+    "entities": {
+        "sensor": {
+            "status": "Status",
+            "brew_total": "Brew total",
+            "machine_type": "Machine type"
+        },
+        "binary_sensor": {
+            "connectivity": "Connectivity"
+        }
+    },
+    "alerts": {
+        "fill_water": "Fill water",
+        "fill_system": "Fill system",
+        "fill_powder": "Fill powder",
+        "insert_tray": "Insert tray",
+        "insert_coffee_bin": "Insert coffee bin",
+        "empty_grounds": "Empty grounds",
+        "empty_tray": "Empty tray",
+        "close_powder_cover": "Close powder cover",
+        "outlet_missing": "Outlet missing",
+        "rear_cover_missing": "Rear cover missing",
+        "remove_water_tank": "Remove water tank",
+        "error_status": "Error status",
+        "program_mode_status": "Program mode status",
+        "filter_alert": "Filter alert",
+        "decalc_alert": "Decalc alert",
+        "cleaning_alert": "Cleaning alert",
+        "cappu_rinse_alert": "Cappu rinse alert",
+        "heating_up": "Heating up",
+        "coffee_rinsing": "Coffee rinsing",
+        "system_filling": "System filling",
+        "system_emptying": "System emptying",
+        "ventilation_closed": "Ventilation closed",
+        "press_rinse": "Press rinse",
+        "milk_alert": "Milk alert",
+        "milk_sensor_error": "Milk sensor error",
+        "milk_sensor_no_signal": "Milk sensor no signal",
+        "no_milk_sensor": "No milk sensor",
+        "no_beans": "No beans",
+        "not_enough_powder": "Not enough powder",
+        "periphery_alert": "Periphery alert",
+        "powder_product": "Powder product",
+        "enjoy_product": "Enjoy product",
+        "coffee_ready": "Coffee ready",
+        "energy_safe": "Energy safe",
+        "welcome": "Welcome",
+        "goodbye": "Goodbye",
+        "active_rf_filter": "Active RF filter",
+        "remote_screen": "Remote screen",
+        "please_wait": "Please wait"
+    },
+    "counters": {
+        "cleaning": "Cleaning",
+        "filter_change": "Filter change",
+        "decalc": "Decalc",
+        "cappu_rinse": "Cappu rinse",
+        "coffee_rinse": "Coffee rinse",
+        "cappu_clean": "Cappu clean"
+    },
+    "percents": {
+        "cleaning": "Cleaning",
+        "filter_change": "Filter change",
+        "decalc": "Decalc"
     }
 }

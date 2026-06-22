@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import ALERT_BINARY_SENSORS, DIAGNOSTIC_ALERT_DEVICE_CLASSES, DOMAIN
 from .coordinator import HANDSHAKE_STATE_OFFLINE, JuraCoordinator
 from .entity import JuraEntity
+from .i18n import get_translator
 
 
 async def async_setup_entry(
@@ -39,10 +40,11 @@ class AlertBinarySensor(JuraEntity, BinarySensorEntity):
     ) -> None:
         super().__init__(coordinator, config_entry)
         self._alert = alert
+        translator = get_translator()
         # "Alert" prefix groups every alert binary_sensor together on the
         # device card. Sort order within the group is then alphabetical
         # by alert name.
-        self._attr_name = f"Alert {alert.replace('_', ' ')}"
+        self._attr_name = translator.format_entity_name("Alert {alert}", alert=alert)
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_alert_{alert}"
         if device_class is not None:
             try:
@@ -73,12 +75,13 @@ class ConnectivityBinarySensor(JuraEntity, BinarySensorEntity):
     attention" main section.
     """
 
-    _attr_name = "Connectivity"
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry) -> None:
         super().__init__(coordinator, config_entry)
+        translator = get_translator()
+        self._attr_name = translator.get_entity_name("binary_sensor", "connectivity", "Connectivity")
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_connectivity"
 
     @property

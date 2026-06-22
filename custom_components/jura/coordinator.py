@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import logging
 from datetime import timedelta
@@ -33,6 +34,7 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
     """Polls one Jura machine and serves snapshots to entities."""
 
     config_entry: ConfigEntry
+    backend: JuraBackend
 
     def __init__(
         self,
@@ -48,7 +50,18 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
             update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
             config_entry=config_entry,
         )
-        self.backend: JuraBackend = backend or self._build_backend(config_entry)
+        # JuraConnectBackend.__init__ loads the per-machine XML profile,
+        # which is a blocking filesystem read. Defer construction to
+        # _async_setup so it runs in an executor instead of the event loop.
+        # Tests inject a pre-built backend and skip _async_setup; honor it
+        # by assigning eagerly when provided.
+        if backend is not None:
+            self.backend = backend
+
+    async def _async_setup(self) -> None:
+        if hasattr(self, "backend"):
+            return
+        self.backend = await asyncio.to_thread(self._build_backend, self.config_entry)
 
     @staticmethod
     def _build_backend(config_entry: ConfigEntry) -> JuraBackend:

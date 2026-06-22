@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 from unittest.mock import MagicMock
 
-from custom_components.jura.const import COUNTER_KEYS, PERCENT_KEYS, STATE_IDLE
+from custom_components.jura import sensor as jura_sensor
+from custom_components.jura.const import COUNTER_KEYS, DOMAIN, PERCENT_KEYS, STATE_IDLE
 from custom_components.jura.sensor import (
     BrewCounterSensor,
     BrewTotalSensor,
@@ -163,6 +165,40 @@ def test_brew_total_sensor_reports_total(sample_snapshot, fake_config_entry):
 def test_brew_total_zero_on_machines_without_statistics(empty_snapshot, fake_config_entry):
     s = BrewTotalSensor(_make_coordinator(empty_snapshot), fake_config_entry)
     assert s.native_value == 0
+
+
+def test_setup_entry_spawns_brew_sensors_when_machine_comes_online(fake_config_entry, empty_snapshot, sample_snapshot):
+    """Regression: when first poll returns an offline/empty snapshot,
+    BrewCounterSensor entities must still be created later, once the
+    machine wakes up and product names start arriving."""
+    coordinator = _make_coordinator(empty_snapshot)
+    listeners: list = []
+    coordinator.async_add_listener = lambda cb, context=None: listeners.append(cb) or (lambda: listeners.remove(cb))
+
+    hass = MagicMock()
+    hass.data = {DOMAIN: {fake_config_entry.entry_id: coordinator}}
+
+    added: list = []
+
+    def _async_add_entities(it):
+        added.extend(it)
+
+    asyncio.run(jura_sensor.async_setup_entry(hass, fake_config_entry, _async_add_entities))
+
+    assert not [e for e in added if isinstance(e, BrewCounterSensor)]
+
+    coordinator.data = sample_snapshot
+    for cb in listeners:
+        cb()
+
+    products = {e._product for e in added if isinstance(e, BrewCounterSensor)}
+    assert products == set(sample_snapshot.brews)
+
+    # Subsequent identical updates don't re-add the same sensors.
+    added_before = len(added)
+    for cb in listeners:
+        cb()
+    assert len(added) == added_before
 
 
 # ---------------------------------------------------------------------------

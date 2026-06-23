@@ -57,7 +57,7 @@ class SettingNumberEntity(JuraEntity, NumberEntity):
     def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry, setting_def) -> None:
         super().__init__(coordinator, config_entry)
         self._setting = setting_def
-        self._attr_name = f"Setting {setting_def.name.replace('_', ' ')}"
+        self._attr_translation_key = f"setting_{setting_def.name}"
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_setting_{setting_def.name}"
         self._attr_native_min_value = float(setting_def.minimum or 0)
         self._attr_native_max_value = float(setting_def.maximum or 0xFF)

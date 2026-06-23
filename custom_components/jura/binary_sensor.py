@@ -39,10 +39,7 @@ class AlertBinarySensor(JuraEntity, BinarySensorEntity):
     ) -> None:
         super().__init__(coordinator, config_entry)
         self._alert = alert
-        # "Alert" prefix groups every alert binary_sensor together on the
-        # device card. Sort order within the group is then alphabetical
-        # by alert name.
-        self._attr_name = f"Alert {alert.replace('_', ' ')}"
+        self._attr_translation_key = f"alert_{alert}"
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_alert_{alert}"
         if device_class is not None:
             try:
@@ -73,7 +70,7 @@ class ConnectivityBinarySensor(JuraEntity, BinarySensorEntity):
     attention" main section.
     """
 
-    _attr_name = "Connectivity"
+    _attr_translation_key = "connectivity"
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 

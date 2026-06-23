@@ -57,5 +57,191 @@
         "abort": {
             "already_configured": "This machine is already configured."
         }
+    },
+    "entity": {
+        "sensor": {
+            "status": {
+                "name": "Status"
+            },
+            "brew_total": {
+                "name": "Brew total"
+            },
+            "machine_type": {
+                "name": "Machine type"
+            },
+            "brew_espresso": {
+                "name": "Brew espresso"
+            },
+            "brew_coffee": {
+                "name": "Brew coffee"
+            },
+            "brew_cappuccino": {
+                "name": "Brew cappuccino"
+            },
+            "brew_macchiato": {
+                "name": "Brew macchiato"
+            },
+            "brew_americano": {
+                "name": "Brew americano"
+            },
+            "brew_flat_white": {
+                "name": "Brew flat white"
+            },
+            "brew_cortado": {
+                "name": "Brew cortado"
+            },
+            "brew_custom": {
+                "name": "Brew custom"
+            },
+            "cycles_cleaning": {
+                "name": "Cycles cleaning"
+            },
+            "cycles_filter_change": {
+                "name": "Cycles filter change"
+            },
+            "cycles_decalc": {
+                "name": "Cycles decalc"
+            },
+            "cycles_cappu_rinse": {
+                "name": "Cycles cappu rinse"
+            },
+            "cycles_coffee_rinse": {
+                "name": "Cycles coffee rinse"
+            },
+            "cycles_cappu_clean": {
+                "name": "Cycles cappu clean"
+            },
+            "service_cleaning_level": {
+                "name": "Service cleaning level"
+            },
+            "service_filter_change_level": {
+                "name": "Service filter change level"
+            },
+            "service_decalc_level": {
+                "name": "Service decalc level"
+            }
+        },
+        "binary_sensor": {
+            "connectivity": {
+                "name": "Connectivity"
+            },
+            "alert_fill_water": {
+                "name": "Alert fill water"
+            },
+            "alert_fill_system": {
+                "name": "Alert fill system"
+            },
+            "alert_fill_powder": {
+                "name": "Alert fill powder"
+            },
+            "alert_insert_tray": {
+                "name": "Alert insert tray"
+            },
+            "alert_insert_coffee_bin": {
+                "name": "Alert insert coffee bin"
+            },
+            "alert_empty_grounds": {
+                "name": "Alert empty grounds"
+            },
+            "alert_empty_tray": {
+                "name": "Alert empty tray"
+            },
+            "alert_close_powder_cover": {
+                "name": "Alert close powder cover"
+            },
+            "alert_outlet_missing": {
+                "name": "Alert outlet missing"
+            },
+            "alert_rear_cover_missing": {
+                "name": "Alert rear cover missing"
+            },
+            "alert_remove_water_tank": {
+                "name": "Alert remove water tank"
+            },
+            "alert_error_status": {
+                "name": "Alert error status"
+            },
+            "alert_program_mode_status": {
+                "name": "Alert program mode status"
+            },
+            "alert_filter_alert": {
+                "name": "Alert filter alert"
+            },
+            "alert_decalc_alert": {
+                "name": "Alert decalc alert"
+            },
+            "alert_cleaning_alert": {
+                "name": "Alert cleaning alert"
+            },
+            "alert_cappu_rinse_alert": {
+                "name": "Alert cappu rinse alert"
+            },
+            "alert_heating_up": {
+                "name": "Alert heating up"
+            },
+            "alert_coffee_rinsing": {
+                "name": "Alert coffee rinsing"
+            },
+            "alert_system_filling": {
+                "name": "Alert system filling"
+            },
+            "alert_system_emptying": {
+                "name": "Alert system emptying"
+            },
+            "alert_ventilation_closed": {
+                "name": "Alert ventilation closed"
+            },
+            "alert_press_rinse": {
+                "name": "Alert press rinse"
+            },
+            "alert_milk_alert": {
+                "name": "Alert milk alert"
+            },
+            "alert_milk_sensor_error": {
+                "name": "Alert milk sensor error"
+            },
+            "alert_milk_sensor_no_signal": {
+                "name": "Alert milk sensor no signal"
+            },
+            "alert_no_milk_sensor": {
+                "name": "Alert no milk sensor"
+            },
+            "alert_no_beans": {
+                "name": "Alert no beans"
+            },
+            "alert_not_enough_powder": {
+                "name": "Alert not enough powder"
+            },
+            "alert_periphery_alert": {
+                "name": "Alert periphery alert"
+            },
+            "alert_powder_product": {
+                "name": "Alert powder product"
+            },
+            "alert_enjoy_product": {
+                "name": "Alert enjoy product"
+            },
+            "alert_coffee_ready": {
+                "name": "Alert coffee ready"
+            },
+            "alert_energy_safe": {
+                "name": "Alert energy safe"
+            },
+            "alert_welcome": {
+                "name": "Alert welcome"
+            },
+            "alert_goodbye": {
+                "name": "Alert goodbye"
+            },
+            "alert_active_rf_filter": {
+                "name": "Alert active rf filter"
+            },
+            "alert_remote_screen": {
+                "name": "Alert remote screen"
+            },
+            "alert_please_wait": {
+                "name": "Alert please wait"
+            }
+        }
     }
 }

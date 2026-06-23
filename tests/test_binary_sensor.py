@@ -56,7 +56,7 @@ def test_alerts_without_device_class_are_diagnostic(sample_snapshot, fake_config
 
 def test_alerts_share_a_common_prefix(sample_snapshot, fake_config_entry):
     sensor = AlertBinarySensor(_coordinator(sample_snapshot), fake_config_entry, "fill_water", "problem")
-    assert sensor.name == "Alert fill water"
+    assert sensor._attr_translation_key == "alert_fill_water"
 
 
 def test_connectivity_sensor_is_diagnostic(sample_snapshot, fake_config_entry):

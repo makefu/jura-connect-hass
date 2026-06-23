@@ -1,0 +1,188 @@
+{
+    "entity": {
+        "sensor": {
+            "status": {
+                "name": "Status"
+            },
+            "brew_total": {
+                "name": "Brühungen gesamt"
+            },
+            "machine_type": {
+                "name": "Maschinentyp"
+            },
+            "brew_espresso": {
+                "name": "Brühung Espresso"
+            },
+            "brew_coffee": {
+                "name": "Brühung Kaffee"
+            },
+            "brew_cappuccino": {
+                "name": "Brühung Cappuccino"
+            },
+            "brew_macchiato": {
+                "name": "Brühung Macchiato"
+            },
+            "brew_americano": {
+                "name": "Brühung Americano"
+            },
+            "brew_flat_white": {
+                "name": "Brühung Flat White"
+            },
+            "brew_cortado": {
+                "name": "Brühung Cortado"
+            },
+            "brew_custom": {
+                "name": "Brühung Benutzerdefiniert"
+            },
+            "cycles_cleaning": {
+                "name": "Reinigungen"
+            },
+            "cycles_filter_change": {
+                "name": "Filterwechsel"
+            },
+            "cycles_decalc": {
+                "name": "Entkalkungen"
+            },
+            "cycles_cappu_rinse": {
+                "name": "Milchsystem-Reinigung"
+            },
+            "cycles_coffee_rinse": {
+                "name": "Kaffee-Spülungen"
+            },
+            "cycles_cappu_clean": {
+                "name": "Cappuccino-Reinigungen"
+            },
+            "service_cleaning_level": {
+                "name": "Wartung Reinigung"
+            },
+            "service_filter_change_level": {
+                "name": "Wartung Filterwechsel"
+            },
+            "service_decalc_level": {
+                "name": "Wartung Entkalkung"
+            }
+        },
+        "binary_sensor": {
+            "connectivity": {
+                "name": "Verbindung"
+            },
+            "alert_fill_water": {
+                "name": "Wasser nachfüllen"
+            },
+            "alert_fill_system": {
+                "name": "Bohnen füllen"
+            },
+            "alert_fill_powder": {
+                "name": "Pulver nachfüllen"
+            },
+            "alert_insert_tray": {
+                "name": "Tablett einlegen"
+            },
+            "alert_insert_coffee_bin": {
+                "name": "Kaffeebohnen-Behälter einsetzen"
+            },
+            "alert_empty_grounds": {
+                "name": "Kaffeesatz leeren"
+            },
+            "alert_empty_tray": {
+                "name": "Restwasserschale leeren"
+            },
+            "alert_close_powder_cover": {
+                "name": "Pulverabdeckung schließen"
+            },
+            "alert_outlet_missing": {
+                "name": "Auslauf fehlt"
+            },
+            "alert_rear_cover_missing": {
+                "name": "Hintere Abdeckung fehlt"
+            },
+            "alert_remove_water_tank": {
+                "name": "Wassertank entfernen"
+            },
+            "alert_error_status": {
+                "name": "Fehlerstatus"
+            },
+            "alert_program_mode_status": {
+                "name": "Programmmodusstatus"
+            },
+            "alert_filter_alert": {
+                "name": "Filterwarnung"
+            },
+            "alert_decalc_alert": {
+                "name": "Entkalkungswarnung"
+            },
+            "alert_cleaning_alert": {
+                "name": "Reinigungswarnung"
+            },
+            "alert_cappu_rinse_alert": {
+                "name": "Automatische Milchsystem Spülung Warnung"
+            },
+            "alert_heating_up": {
+                "name": "Wird aufgeheizt"
+            },
+            "alert_coffee_rinsing": {
+                "name": "Kaffee wird gespült"
+            },
+            "alert_system_filling": {
+                "name": "System wird gefüllt"
+            },
+            "alert_system_emptying": {
+                "name": "System wird geleert"
+            },
+            "alert_ventilation_closed": {
+                "name": "Belüftung geschlossen"
+            },
+            "alert_press_rinse": {
+                "name": "Spülvorgang starten"
+            },
+            "alert_milk_alert": {
+                "name": "Milchwarnung"
+            },
+            "alert_milk_sensor_error": {
+                "name": "Milchsensorfehler"
+            },
+            "alert_milk_sensor_no_signal": {
+                "name": "Milchsensor kein Signal"
+            },
+            "alert_no_milk_sensor": {
+                "name": "Kein Milchsensor"
+            },
+            "alert_no_beans": {
+                "name": "Keine Kaffeebohnen"
+            },
+            "alert_not_enough_powder": {
+                "name": "Nicht genug Pulver"
+            },
+            "alert_periphery_alert": {
+                "name": "Peripherie-Warnung"
+            },
+            "alert_powder_product": {
+                "name": "Pulverprodukt"
+            },
+            "alert_enjoy_product": {
+                "name": "Getränk genießen"
+            },
+            "alert_coffee_ready": {
+                "name": "Kaffee bereit"
+            },
+            "alert_energy_safe": {
+                "name": "Energiesparmodus"
+            },
+            "alert_welcome": {
+                "name": "Willkommen"
+            },
+            "alert_goodbye": {
+                "name": "Auf Wiedersehen"
+            },
+            "alert_active_rf_filter": {
+                "name": "Aktiver HF-Filter"
+            },
+            "alert_remote_screen": {
+                "name": "Fernbedienung"
+            },
+            "alert_please_wait": {
+                "name": "Bitte warten"
+            }
+        }
+    }
+}

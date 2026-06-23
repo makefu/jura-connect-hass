@@ -49,5 +49,40 @@ pkgs.testers.nixosTest {
     # Verify no import errors for our component
     machine.fail("journalctl -u home-assistant.service | grep -q 'Error loading.*jura'")
     machine.fail("journalctl -u home-assistant.service | grep -q 'ImportError.*jura'")
+
+    # Verify translation files exist
+    machine.succeed("test -f /var/lib/hass/custom_components/jura/strings.json")
+    machine.succeed("test -f /var/lib/hass/custom_components/jura/translations/de.json")
+
+    # Verify strings.json has correct structure with entity section
+    machine.succeed(
+        "grep -q '\"entity\"' /var/lib/hass/custom_components/jura/strings.json"
+    )
+    machine.succeed(
+        "grep -q '\"sensor\"' /var/lib/hass/custom_components/jura/strings.json"
+    )
+    machine.succeed(
+        "grep -q '\"binary_sensor\"' /var/lib/hass/custom_components/jura/strings.json"
+    )
+
+    # Verify German translations exist with correct keys
+    machine.succeed(
+        "grep -q '\"status\"' /var/lib/hass/custom_components/jura/translations/de.json"
+    )
+    machine.succeed(
+        "grep -q '\"Brühungen gesamt\"' /var/lib/hass/custom_components/jura/translations/de.json"
+    )
+    machine.succeed(
+        "grep -q '\"Milchsystem-Reinigung\"' /var/lib/hass/custom_components/jura/translations/de.json"
+    )
+    machine.succeed(
+        "grep -q '\"Automatische Milchsystem Spülung Warnung\"' /var/lib/hass/custom_components/jura/translations/de.json"
+    )
+    machine.succeed(
+        "grep -q '\"Spülvorgang starten\"' /var/lib/hass/custom_components/jura/translations/de.json"
+    )
+
+    # Verify no legacy i18n.py exists
+    machine.fail("test -f /var/lib/hass/custom_components/jura/i18n.py")
   '';
 }

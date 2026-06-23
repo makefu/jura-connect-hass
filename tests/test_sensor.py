@@ -95,34 +95,33 @@ def test_percent_sensor_full_set(sample_snapshot, fake_config_entry):
 
 def test_state_sensor_groups_under_status(fake_config_entry, sample_snapshot):
     s = StateSensor(_make_coordinator(sample_snapshot), fake_config_entry)
-    assert s.name == "Status"
+    assert s._attr_translation_key == "status"
     assert s.entity_category is None
 
 
 def test_counter_sensor_is_diagnostic_and_named_with_cycles_prefix(sample_snapshot, fake_config_entry):
     s = CounterSensor(_make_coordinator(sample_snapshot), fake_config_entry, "cleaning")
     assert s.entity_category == EntityCategory.DIAGNOSTIC
-    assert s.name == "Cycles cleaning"
+    assert s._attr_translation_key == "cycles_cleaning"
 
 
 def test_percent_sensor_is_default_category_and_named_with_service_prefix(sample_snapshot, fake_config_entry):
     s = PercentSensor(_make_coordinator(sample_snapshot), fake_config_entry, "decalc")
     assert s.entity_category is None
-    assert s.name == "Service decalc level"
+    assert s._attr_translation_key == "service_decalc_level"
 
 
 def test_brew_counter_named_with_brew_prefix(sample_snapshot, fake_config_entry):
     s = BrewCounterSensor(_make_coordinator(sample_snapshot), fake_config_entry, "espresso")
     assert s.entity_category is None
-    assert s.name == "Brew espresso"
+    assert s._attr_translation_key == "brew_espresso"
 
 
 def test_brew_total_sorts_with_brew_group(sample_snapshot, fake_config_entry):
     s = BrewTotalSensor(_make_coordinator(sample_snapshot), fake_config_entry)
     assert s.entity_category is None
-    assert s.name == "Brew total"
-    # "Brew total" sorts after "Brew espresso", "Brew coffee", etc.
-    assert s.name > BrewCounterSensor(_make_coordinator(sample_snapshot), fake_config_entry, "espresso").name
+    assert s._attr_translation_key == "brew_total"
+    # Translation keys are used for i18n; name display is handled by Home Assistant
 
 
 def test_machine_type_is_diagnostic(sample_snapshot, fake_config_entry):

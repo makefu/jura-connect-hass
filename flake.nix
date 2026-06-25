@@ -8,7 +8,12 @@
   };
 
   outputs =
-    { nixpkgs, jura-connect, self, ... }:
+    {
+      nixpkgs,
+      jura-connect,
+      self,
+      ...
+    }:
     let
       forAllSystems =
         f:
@@ -17,8 +22,7 @@
           "aarch64-linux"
         ] (system: f nixpkgs.legacyPackages.${system} system);
 
-      version =
-        (builtins.fromJSON (builtins.readFile ./custom_components/jura/manifest.json)).version;
+      version = (builtins.fromJSON (builtins.readFile ./custom_components/jura/manifest.json)).version;
     in
     {
       packages = forAllSystems (
@@ -71,13 +75,32 @@
       checks = forAllSystems (
         pkgs: system:
         let
-          # Use HA's python so the type checker can see homeassistant + its deps.
+          # Home Assistant pins its own (newer) Python; the upstream
+          # jura_connect package is built for pkgs.python313, so its module
+          # is not importable under HA's interpreter. Rebuild it against
+          # HA's Python purely so the type checker can resolve the import.
           haPython = pkgs.home-assistant.python;
-          pythonEnv = haPython.withPackages (ps: [
+          juraConnectHa = haPython.pkgs.buildPythonPackage {
+            pname = "jura_connect";
+            version = jura-connect.packages.${system}.default.version;
+            src = jura-connect.packages.${system}.default.src;
+            pyproject = true;
+            build-system = [ haPython.pkgs.setuptools ];
+            doCheck = false;
+          };
+          # ty needs HA's stubs + jura_connect visible together.
+          tyEnv = haPython.withPackages (ps: [
             ps.homeassistant
             ps.voluptuous
+            juraConnectHa
+          ]);
+          # pytest stubs Home Assistant in conftest.py, so the suite only
+          # needs the test stack plus the real jura_connect — same env as
+          # the dev shell (pkgs.python313), where jura_connect imports.
+          testEnv = pkgs.python313.withPackages (ps: [
             ps.pytest
             ps.pytest-asyncio
+            ps.voluptuous
             ps.freezegun
             jura-connect.packages.${system}.default
           ]);
@@ -102,13 +125,15 @@
               }
               ''
                 cd ${self}
-                ty check --python ${pythonEnv}
+                # Type-check the shipped integration only; the test suite
+                # leans on MagicMock stubs that defeat static typing.
+                ty check custom_components --python ${tyEnv}
                 touch $out
               '';
           pytest =
             pkgs.runCommand "pytest"
               {
-                nativeBuildInputs = [ pythonEnv ];
+                nativeBuildInputs = [ testEnv ];
               }
               ''
                 cd ${self}

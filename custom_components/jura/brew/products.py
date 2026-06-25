@@ -8,6 +8,8 @@ encoding was validated live on a JURA E6 (a real coffee brewed from it):
                       COFFEE_STRENGTH F3 -> 2   value = chosen level byte
                       WATER_AMOUNT    F4 -> 3   value = ml // step
                       TEMPERATURE     F7 -> 6   value = chosen item byte
+                      MILK_FOAM_AMOUNT F6 -> 5  value = amount // step
+                      BYPASS          F10 -> 9  value = ml // step
     byte 8          0x01 (fixed)
     byte 15         0x00 (grinder default)
     all other bytes 0x00
@@ -21,7 +23,7 @@ triggered by an explicit Home Assistant button press / service call at runtime.
 
 from __future__ import annotations
 
-from .definitions import ProductArg, ProductDef
+from .definitions import MINMAX_ARG_KINDS, ProductArg, ProductDef
 
 PREFIX = "@TP:"
 _PAYLOAD_BYTES = 16
@@ -82,8 +84,12 @@ def _arg_value(
         if temp is None:
             return arg.default
         return _clamp_to_items(temp, arg.items)
-    if arg.kind == "WATER_AMOUNT":
-        return _encode_water(arg, water_ml)
+    if arg.kind in MINMAX_ARG_KINDS:
+        # All MinMax args encode as ``value // step`` (``_encode_water`` is the
+        # shared helper). Only water is user-overridable today; milk-foam amount
+        # (F6) and bypass (F10) brew at their default instead of staying 0x00.
+        override = water_ml if arg.kind == "WATER_AMOUNT" else None
+        return _encode_water(arg, override)
     return None
 
 

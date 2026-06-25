@@ -162,6 +162,28 @@ def test_factory_default_emits_xml_default_payload() -> None:
     )
 
 
+def test_milk_foam_amount_f6_default_encoded() -> None:
+    """MILK_FOAM_AMOUNT (F6, index 5) brews at its default: 22 // 1 -> 0x16.
+
+    Derived from the EF1030 XML (not yet live-brewed): a milk drink previously
+    left its milk-foam byte at 0x00 because only F3/F4/F7 were encoded.
+    """
+    product = _product(
+        "08",
+        [ProductArg(kind="MILK_FOAM_AMOUNT", argument="F6", index=5, default=22, min=1, max=45, step=1)],
+    )
+    assert build_start_command(product) == "@TP:08000000001600000100000000000000"
+
+
+def test_bypass_f10_default_encoded() -> None:
+    """BYPASS (F10, index 9) brews at its default: 40 // 5 -> 0x08."""
+    product = _product(
+        "28",
+        [ProductArg(kind="BYPASS", argument="F10", index=9, default=40, min=0, max=240, step=5)],
+    )
+    assert _byte(build_start_command(product), 9) == "08"
+
+
 def test_brew_xml_path_end_to_end() -> None:
     """The XML sourcing path: resolve jura_connect's bundled data and
     encode a real product. Validates importlib.resources wiring +

@@ -29,8 +29,11 @@ from dataclasses import dataclass, field
 # passes ``base_dir`` resolved from the jura_connect package data).
 DEFINITIONS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "definitions"))
 
-# Product child tags we encode into the start command.
-ARG_KINDS = ("COFFEE_STRENGTH", "WATER_AMOUNT", "TEMPERATURE")
+# Product child tags we encode into the start command. MinMax args carry
+# Value/Min/Max/Step and encode as ``value // step`` (water, milk-foam amount,
+# bypass); strength/temperature instead pick a named ITEM byte.
+MINMAX_ARG_KINDS = ("WATER_AMOUNT", "MILK_FOAM_AMOUNT", "BYPASS")
+ARG_KINDS = ("COFFEE_STRENGTH", "TEMPERATURE", *MINMAX_ARG_KINDS)
 
 _TYPE_RE = re.compile(r"(EF\d+\w*)")
 _BASE_RE = re.compile(r"(EF\d+)")
@@ -129,7 +132,7 @@ def _parse_arg(kind: str, element: ET.Element) -> ProductArg:
             value = 0
         items.append((item.get("Name") or "", value))
 
-    if kind == "WATER_AMOUNT":
+    if kind in MINMAX_ARG_KINDS:
         default = _int(element.get("Value")) or _int(element.get("Default")) or 0
         return ProductArg(
             kind=kind,

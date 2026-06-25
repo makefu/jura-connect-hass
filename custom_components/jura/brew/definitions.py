@@ -173,9 +173,11 @@ def _parse_product(element: ET.Element) -> ProductDef:
 def parse_definition_xml(path: str) -> MachineDefinition:
     """Parse a machine-definition XML into a :class:`MachineDefinition`.
 
-    Only ``Active="true"`` products are included. Counter names are collected
-    from the ``TOTALCOUNTER`` plus each active product's ``PosCSV``. Alerts map
-    each ``<ALERT Bit Name>`` to its human-readable name.
+    Products are active unless their ``Active`` attribute is explicitly non-
+    ``"true"`` (matching the J.O.E. app, which seeds the flag to true and only
+    overrides it when the attribute is present). Counter names are collected from
+    the ``TOTALCOUNTER`` plus each ``Active="true"`` product's ``PosCSV``. Alerts
+    map each ``<ALERT Bit Name>`` to its human-readable name.
     """
     root = ET.parse(path).getroot()
 
@@ -190,11 +192,20 @@ def parse_definition_xml(path: str) -> MachineDefinition:
             if pos is not None and pos.isdigit():
                 counters[int(pos)] = element.get("Name") or "Total Products"
         elif tag == "PRODUCT":
-            if (element.get("Active") or "").lower() != "true":
+            # The J.O.E. app treats a product as active unless its Active flag is
+            # explicitly non-"true": it seeds the flag to true and only overrides
+            # it when the attribute is present (XMLParser.java `boolean z7 = true`).
+            # A missing Active attribute therefore means the drink is brewable.
+            active = element.get("Active")
+            if active is not None and active.strip().lower() != "true":
                 continue
             product = _parse_product(element)
             products.append(product)
-            if product.pos_csv is not None:
+            # Counter labels stay tied to the strict Active="true" set: that
+            # mapping is validated against live @TR:32 captures and PosCSV is not
+            # unique across products (Coffee, Cafe Barista and Barista Lungo all
+            # use PosCSV 4), so only an explicitly-active product owns the label.
+            if product.pos_csv is not None and (active or "").strip().lower() == "true":
                 counters[product.pos_csv] = product.name
         elif tag == "ALERT":
             bit = element.get("Bit")

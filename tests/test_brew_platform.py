@@ -42,15 +42,21 @@ from homeassistant.config_entries import ConfigEntry  # noqa: E402
 
 FACTORY_DEFAULT = "Factory Default"
 
-# EF1030 (E6) product names, in definition order.
+# EF1030 (E6) product names, in definition order. A product is brewable unless
+# it is explicitly Active="false"; the three drinks with no Active attribute
+# (Milk Foam, Cafe Barista, Barista Lungo) are included, only Powderproduct
+# (Active="false") is dropped.
 _EF1030_PRODUCTS = [
     "Espresso",
     "Coffee",
     "Cappuccino",
     "Espresso Macchiato",
+    "Milk Foam",
     "Hotwater Portion(normal)",
     "2 Espressi",
     "2 Coffee",
+    "Cafe Barista",
+    "Barista Lungo",
 ]
 
 # Live-validated payload vectors (a real coffee was brewed from each):

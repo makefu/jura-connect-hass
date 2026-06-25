@@ -71,7 +71,12 @@ class SettingSelectEntity(JuraEntity, SelectEntity):
     def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry, setting_def) -> None:
         super().__init__(coordinator, config_entry)
         self._setting = setting_def
-        self._attr_name = f"Setting {setting_def.name.replace('_', ' ')}"
+        # Setting names come from the machine profile, not a fixed enum, so
+        # only the "Setting" prefix is localisable: HA renders
+        # entity.select.setting.name ("Setting {setting}") and fills the
+        # placeholder with the profile setting name.
+        self._attr_translation_key = "setting"
+        self._attr_translation_placeholders = {"setting": setting_def.name.replace("_", " ")}
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_setting_{setting_def.name}"
         self._attr_options = [item.name for item in setting_def.items]
 

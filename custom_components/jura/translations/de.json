@@ -1,0 +1,177 @@
+{
+    "entity": {
+        "sensor": {
+            "status": {
+                "name": "Status"
+            },
+            "machine_type": {
+                "name": "Maschinentyp"
+            },
+            "brew_total": {
+                "name": "Bezüge gesamt"
+            },
+            "brew_counter": {
+                "name": "Bezüge {product}"
+            },
+            "counter_cleaning": {
+                "name": "Reinigungszyklen"
+            },
+            "counter_filter_change": {
+                "name": "Filterwechselzyklen"
+            },
+            "counter_decalc": {
+                "name": "Entkalkungszyklen"
+            },
+            "counter_cappu_rinse": {
+                "name": "Cappuccino-Spülzyklen"
+            },
+            "counter_coffee_rinse": {
+                "name": "Kaffee-Spülzyklen"
+            },
+            "counter_cappu_clean": {
+                "name": "Cappuccino-Reinigungszyklen"
+            },
+            "percent_cleaning": {
+                "name": "Reinigungsstand"
+            },
+            "percent_filter_change": {
+                "name": "Filterstand"
+            },
+            "percent_decalc": {
+                "name": "Entkalkungsstand"
+            }
+        },
+        "binary_sensor": {
+            "connectivity": {
+                "name": "Verbindung"
+            },
+            "fill_water": {
+                "name": "Wasser nachfüllen"
+            },
+            "fill_system": {
+                "name": "System füllen"
+            },
+            "fill_powder": {
+                "name": "Pulver nachfüllen"
+            },
+            "empty_grounds": {
+                "name": "Kaffeesatz leeren"
+            },
+            "empty_tray": {
+                "name": "Tablett leeren"
+            },
+            "insert_tray": {
+                "name": "Tablett einlegen"
+            },
+            "insert_coffee_bin": {
+                "name": "Kaffeesatzbehälter einsetzen"
+            },
+            "outlet_missing": {
+                "name": "Auslauf fehlt"
+            },
+            "rear_cover_missing": {
+                "name": "Hintere Abdeckung fehlt"
+            },
+            "close_powder_cover": {
+                "name": "Pulverabdeckung schließen"
+            },
+            "remove_water_tank": {
+                "name": "Wassertank entfernen"
+            },
+            "error_status": {
+                "name": "Fehlerstatus"
+            },
+            "program_mode_status": {
+                "name": "Programmmodusstatus"
+            },
+            "milk_alert": {
+                "name": "Milchwarnung"
+            },
+            "milk_sensor_error": {
+                "name": "Milchsensorfehler"
+            },
+            "no_milk_sensor": {
+                "name": "Kein Milchsensor"
+            },
+            "milk_sensor_no_signal": {
+                "name": "Milchsensor kein Signal"
+            },
+            "filter_alert": {
+                "name": "Filterwarnung"
+            },
+            "decalc_alert": {
+                "name": "Entkalkungswarnung"
+            },
+            "cleaning_alert": {
+                "name": "Reinigungswarnung"
+            },
+            "cappu_rinse_alert": {
+                "name": "Cappuccino-Spülwarnung"
+            },
+            "heating_up": {
+                "name": "Wird aufgeheizt"
+            },
+            "coffee_rinsing": {
+                "name": "Kaffee wird gespült"
+            },
+            "system_filling": {
+                "name": "System wird gefüllt"
+            },
+            "system_emptying": {
+                "name": "System wird geleert"
+            },
+            "please_wait": {
+                "name": "Bitte warten"
+            },
+            "press_rinse": {
+                "name": "Spültaste drücken"
+            },
+            "ventilation_closed": {
+                "name": "Belüftung geschlossen"
+            },
+            "no_beans": {
+                "name": "Keine Kaffeebohnen"
+            },
+            "not_enough_powder": {
+                "name": "Nicht genug Pulver"
+            },
+            "periphery_alert": {
+                "name": "Peripherie-Warnung"
+            },
+            "powder_product": {
+                "name": "Pulverprodukt"
+            },
+            "enjoy_product": {
+                "name": "Getränk genießen"
+            },
+            "coffee_ready": {
+                "name": "Kaffee bereit"
+            },
+            "energy_safe": {
+                "name": "Energiesparmodus"
+            },
+            "welcome": {
+                "name": "Willkommen"
+            },
+            "goodbye": {
+                "name": "Auf Wiedersehen"
+            },
+            "active_rf_filter": {
+                "name": "Aktiver HF-Filter"
+            },
+            "remote_screen": {
+                "name": "Fernbedienung"
+            }
+        },
+        "select": {
+            "setting": {
+                "name": "Einstellung {setting}"
+            }
+        },
+        "number": {
+            "setting": {
+                "name": "Einstellung {setting}"
+            }
+        }
+    }
+}

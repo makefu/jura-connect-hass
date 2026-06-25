@@ -54,9 +54,11 @@ def test_alerts_without_device_class_are_diagnostic(sample_snapshot, fake_config
     assert sensor.entity_category == EntityCategory.DIAGNOSTIC
 
 
-def test_alerts_share_a_common_prefix(sample_snapshot, fake_config_entry):
+def test_alert_uses_alert_name_as_translation_key(sample_snapshot, fake_config_entry):
     sensor = AlertBinarySensor(_coordinator(sample_snapshot), fake_config_entry, "fill_water", "problem")
-    assert sensor.name == "Alert fill water"
+    # Name is resolved by HA from entity.binary_sensor.fill_water.name.
+    assert sensor._attr_has_entity_name is True
+    assert sensor._attr_translation_key == "fill_water"
 
 
 def test_connectivity_sensor_is_diagnostic(sample_snapshot, fake_config_entry):

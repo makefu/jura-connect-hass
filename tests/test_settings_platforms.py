@@ -44,6 +44,22 @@ def test_select_entity_options_come_from_profile(ef1091, sample_snapshot, fake_c
     assert entity.unique_id.endswith("setting_language")
 
 
+def test_select_entity_uses_setting_placeholder(ef1091, sample_snapshot, fake_config_entry):
+    language = _setting_by_name(ef1091, "language")
+    entity = SettingSelectEntity(_coordinator(sample_snapshot), fake_config_entry, language)
+    # The profile setting name only fills the {setting} placeholder; the
+    # "Setting" prefix is localised via entity.select.setting.name.
+    assert entity._attr_translation_key == "setting"
+    assert entity._attr_translation_placeholders == {"setting": "language"}
+
+
+def test_number_entity_uses_setting_placeholder(ef1091, sample_snapshot, fake_config_entry):
+    hardness = _setting_by_name(ef1091, "hardness")
+    entity = SettingNumberEntity(_coordinator(sample_snapshot), fake_config_entry, hardness)
+    assert entity._attr_translation_key == "setting"
+    assert entity._attr_translation_placeholders == {"setting": "hardness"}
+
+
 def test_select_entity_current_option_decoded_from_hex(ef1091, sample_snapshot, fake_config_entry):
     """The coordinator stores raw hex; the entity translates it back to a name."""
     language = _setting_by_name(ef1091, "language")

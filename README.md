@@ -76,6 +76,16 @@ dongles sleep regularly and v0.1 caused dashboards to flash with every
 failed poll. The connectivity binary sensor is the single source of truth
 for reachability.
 
+### Languages
+
+Entity names use Home Assistant's native per-user translations, so each
+client sees them in its own UI language. English ships in `strings.json`
+(mirrored to `translations/en.json`); German (`de`) is fully translated in
+`translations/de.json`. The dynamic `Brew <recipe>` and `Setting <name>`
+entities translate their prefix and keep the machine-supplied name as a
+placeholder. To add a language, copy `translations/de.json` to
+`translations/<lang>.json` and translate the `name` values.
+
 ### Services
 
 | Service                | Description                                           |

@@ -7,7 +7,7 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .backends.base import MachineSnapshot
@@ -38,16 +38,29 @@ async def async_setup_entry(
     ]
     entities.extend(CounterSensor(coordinator, config_entry, key) for key in COUNTER_KEYS)
     entities.extend(PercentSensor(coordinator, config_entry, key) for key in PERCENT_KEYS)
+    async_add_entities(entities)
 
     # Per-product brew counters are dynamic: the set of recipe codes a
-    # machine exposes depends on its profile, so we create one entity
-    # per name seen in the first snapshot. New recipes after setup are
-    # rare; users can re-add the integration if they're added later.
-    snapshot = coordinator.data
-    if snapshot is not None:
-        entities.extend(BrewCounterSensor(coordinator, config_entry, name) for name in snapshot.brews)
+    # machine exposes depends on its profile, and if the machine is
+    # offline on the first poll the brew table is empty. Spawn one
+    # BrewCounterSensor the first time each product name appears in a
+    # snapshot, and keep watching for new ones on every coordinator
+    # update.
+    known_brews: set[str] = set()
 
-    async_add_entities(entities)
+    @callback
+    def _sync_brew_sensors() -> None:
+        snapshot = coordinator.data
+        if snapshot is None:
+            return
+        new_products = [name for name in snapshot.brews if name not in known_brews]
+        if not new_products:
+            return
+        known_brews.update(new_products)
+        async_add_entities(BrewCounterSensor(coordinator, config_entry, name) for name in new_products)
+
+    _sync_brew_sensors()
+    config_entry.async_on_unload(coordinator.async_add_listener(_sync_brew_sensors))
 
 
 def _snapshot(coordinator: JuraCoordinator) -> MachineSnapshot | None:

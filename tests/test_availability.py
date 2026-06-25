@@ -11,7 +11,10 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import dataclasses
+
 from custom_components.jura.binary_sensor import AlertBinarySensor, ConnectivityBinarySensor
+from custom_components.jura.coordinator import HANDSHAKE_STATE_OFFLINE
 from custom_components.jura.sensor import CounterSensor, PercentSensor, StateSensor
 
 
@@ -87,6 +90,18 @@ def test_connectivity_sensor_is_always_available(fake_config_entry, sample_snaps
 def test_connectivity_sensor_device_class_is_connectivity(fake_config_entry, sample_snapshot):
     sensor = ConnectivityBinarySensor(_coordinator(data=sample_snapshot), fake_config_entry)
     assert sensor.device_class == "connectivity"
+
+
+def test_connectivity_sensor_reports_off_when_snapshot_handshake_offline(sample_snapshot, fake_config_entry):
+    """When the coordinator surfaces an OFFLINE snapshot, connectivity must be off.
+
+    The poll succeeded (last_update_success=True) — but the *machine* is
+    unreachable. Connectivity is the canonical signal for reachability,
+    so it must key off handshake_state too.
+    """
+    offline_snapshot = dataclasses.replace(sample_snapshot, handshake_state=HANDSHAKE_STATE_OFFLINE)
+    coordinator = _coordinator(data=offline_snapshot, last_update_success=True)
+    assert ConnectivityBinarySensor(coordinator, fake_config_entry).is_on is False
 
 
 def test_connectivity_sensor_unique_id_distinct_from_alerts(fake_config_entry, sample_snapshot):

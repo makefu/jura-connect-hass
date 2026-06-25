@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import ALERT_BINARY_SENSORS, DIAGNOSTIC_ALERT_DEVICE_CLASSES, DOMAIN, FRIENDLY_LABELS
-from .coordinator import JuraCoordinator
+from .coordinator import HANDSHAKE_STATE_OFFLINE, JuraCoordinator
 from .entity import JuraEntity
 
 
@@ -87,4 +87,9 @@ class ConnectivityBinarySensor(JuraEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool:
-        return bool(self.coordinator.last_update_success)
+        if not self.coordinator.last_update_success:
+            return False
+        snapshot = self.coordinator.data
+        if snapshot is not None and snapshot.handshake_state == HANDSHAKE_STATE_OFFLINE:
+            return False
+        return True

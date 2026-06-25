@@ -56,12 +56,18 @@ class SupportsResponse:
     OPTIONAL = "optional"
 
 
+def callback(func):
+    """No-op stand-in for ``homeassistant.core.callback``."""
+    return func
+
+
 _make_module(
     "homeassistant.core",
     HomeAssistant=HomeAssistant,
     ServiceCall=ServiceCall,
     ServiceResponse=ServiceResponse,
     SupportsResponse=SupportsResponse,
+    callback=callback,
 )
 
 
@@ -134,6 +140,11 @@ class ConfigEntry:
     def __init__(self, entry_id="test_entry_id", data=None):
         self.entry_id = entry_id
         self.data = data or {}
+        self._unload_callbacks: list = []
+
+    def async_on_unload(self, func):
+        self._unload_callbacks.append(func)
+        return func
 
 
 _make_module(
@@ -279,11 +290,26 @@ class DataUpdateCoordinator:
         self.config_entry = config_entry
         self.data = None
         self.last_update_success = True
+        self._listeners: list = []
+
+    def _notify_listeners(self):
+        for cb in list(self._listeners):
+            cb()
+
+    def async_add_listener(self, update_callback, context=None):
+        self._listeners.append(update_callback)
+
+        def _remove():
+            if update_callback in self._listeners:
+                self._listeners.remove(update_callback)
+
+        return _remove
 
     async def async_config_entry_first_refresh(self):
         try:
             self.data = await self._async_update_data()
             self.last_update_success = True
+            self._notify_listeners()
         except Exception:
             self.last_update_success = False
             raise
@@ -292,16 +318,15 @@ class DataUpdateCoordinator:
         try:
             self.data = await self._async_update_data()
             self.last_update_success = True
+            self._notify_listeners()
         except Exception:
             self.last_update_success = False
             raise
 
     def async_set_updated_data(self, data):
-        # Real HA also notifies registered listeners; the test stub
-        # only needs to mirror the data attribute and the
-        # last_update_success reset.
         self.data = data
         self.last_update_success = True
+        self._notify_listeners()
 
     def async_update_listeners(self):
         # Real HA pushes a state update to every registered CoordinatorEntity;

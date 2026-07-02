@@ -13,7 +13,11 @@ import pytest
 jura_connect = pytest.importorskip("jura_connect")
 simulator = pytest.importorskip("jura_connect.simulator")
 
-from custom_components.jura.backends.jura import JuraConnectBackend  # noqa: E402
+from custom_components.jura.backends import jura as jura_backend  # noqa: E402
+from custom_components.jura.backends.jura import (  # noqa: E402
+    JuraConnectBackend,
+    machine_type_from_article,
+)
 
 
 @pytest.fixture
@@ -193,3 +197,37 @@ async def test_run_named_status(running_simulator):
     result = await backend.run_named("status")
     assert result["name"] == "status"
     assert "active_alerts" in result["value"]
+
+
+async def test_machine_type_from_article_none_returns_none():
+    """A missing article number resolves to no EF code without touching disk."""
+    assert await machine_type_from_article(None) is None
+
+
+async def test_machine_type_from_article_offloads_blocking_lookup(monkeypatch):
+    """Regression: the catalogue lookup reads JOE_MACHINES.TXT off disk and
+    used to run inline in the config-flow event loop, which Home Assistant
+    flags as a blocking call. It must be a coroutine that offloads the lookup
+    to a worker thread.
+    """
+    import inspect
+    import threading
+
+    assert inspect.iscoroutinefunction(machine_type_from_article)
+
+    class _Entry:
+        ef_code = "EF545"
+
+    lookup_threads: list[threading.Thread] = []
+
+    def _fake_lookup(_n):
+        lookup_threads.append(threading.current_thread())
+        return _Entry()
+
+    monkeypatch.setattr(jura_backend, "lookup_by_article_number", _fake_lookup)
+    assert await machine_type_from_article(15001) == "EF545"
+    # The catalogue read must have run on a worker thread, not the loop.
+    assert lookup_threads and lookup_threads[0] is not threading.current_thread()
+
+    monkeypatch.setattr(jura_backend, "lookup_by_article_number", lambda _n: None)
+    assert await machine_type_from_article(15001) is None

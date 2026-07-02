@@ -102,9 +102,36 @@ After building, verify the CLI:
 
 ## Versioning
 
-Version lives in two places — both must be updated together:
+Version lives in two places — both must be updated together in the same commit:
 - `custom_components/jura/manifest.json` (source of truth, read by flake.nix)
 - `pyproject.toml`
+
+Keep them in lockstep. They have drifted before (manifest at 0.8.0 while
+pyproject lagged at 0.7.5); nothing consumes the pyproject metadata at
+runtime, so the drift is harmless but confusing for anyone installing via
+pip. When bumping, also check the `jura_connect` requirement floor matches
+in both files (`requirements` in manifest.json, `dependencies` in
+pyproject.toml).
+
+Use semver: patch for bug fixes, minor for new entities/features.
+
+### Release Process
+
+1. Bump the version in **both** files above (and align the `jura_connect`
+   floor if it changed).
+2. Run the full gate — `pytest`, `ruff check`, `ruff format --check`, and
+   the `ty` check must all pass (see the flake checks:
+   `nix eval .#checks.x86_64-linux --apply builtins.attrNames`).
+3. Commit with a `vX.Y.Z -- <summary>` subject.
+4. Push to `main`.
+5. Tag and publish the GitHub release, targeting `main`:
+
+   ```sh
+   gh release create vX.Y.Z --target main \
+     --title "vX.Y.Z -- <summary>" --notes "<changelog>"
+   ```
+
+   Link the compare view (`compare/vPREV...vX.Y.Z`) in the notes.
 
 ## Adding New Files
 

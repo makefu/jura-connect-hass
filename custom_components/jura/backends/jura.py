@@ -337,9 +337,18 @@ async def probe_address(address: str, port: int = 51515) -> bool:
     return await asyncio.to_thread(_do)
 
 
-def machine_type_from_article(article_number: int | None) -> str | None:
-    """Map a UDP-discovered article number to an EF code, if known."""
+async def machine_type_from_article(article_number: int | None) -> str | None:
+    """Map a UDP-discovered article number to an EF code, if known.
+
+    ``lookup_by_article_number`` reads the bundled machine catalogue off
+    disk, so the lookup runs in a worker thread to keep the config-flow
+    event loop unblocked — the same convention as the other helpers here.
+    """
     if not article_number:
         return None
-    entry = lookup_by_article_number(article_number)
-    return entry.ef_code if entry else None
+
+    def _do() -> str | None:
+        entry = lookup_by_article_number(article_number)
+        return entry.ef_code if entry else None
+
+    return await asyncio.to_thread(_do)

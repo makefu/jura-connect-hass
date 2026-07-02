@@ -142,7 +142,7 @@ class JuraConfigFlow(ConfigFlow, domain=DOMAIN):
                     # Best-effort: derive the EF code from the discovery
                     # broadcast's article number so the machine_type
                     # step can default to the right value.
-                    self._auto_machine_type = machine_type_from_article(machine.article_number)
+                    self._auto_machine_type = await machine_type_from_article(machine.article_number)
                     return await self.async_step_pair_progress()
             return await self.async_step_manual()
 

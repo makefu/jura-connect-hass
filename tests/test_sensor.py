@@ -199,19 +199,19 @@ def test_brew_total_zero_on_machines_without_statistics(empty_snapshot, fake_con
     assert s.native_value == 0
 
 
-def test_brew_total_unavailable_but_keeps_value_when_offline(sample_snapshot, fake_config_entry):
-    """OFFLINE snapshot: entity is unavailable yet keeps the last-known total —
+def test_brew_total_available_and_keeps_value_when_offline(sample_snapshot, fake_config_entry):
+    """OFFLINE snapshot: entity keeps rendering the last-known total —
     the anti-0-spike invariant for total_increasing counters."""
     offline = replace(sample_snapshot, handshake_state=HANDSHAKE_STATE_OFFLINE)
     s = BrewTotalSensor(_make_coordinator(offline), fake_config_entry)
-    assert s.available is False
+    assert s.available is True
     assert s.native_value == 809
 
 
-def test_brew_counter_unavailable_but_keeps_value_when_offline(sample_snapshot, fake_config_entry):
+def test_brew_counter_available_and_keeps_value_when_offline(sample_snapshot, fake_config_entry):
     offline = replace(sample_snapshot, handshake_state=HANDSHAKE_STATE_OFFLINE)
     s = BrewCounterSensor(_make_coordinator(offline), fake_config_entry, "espresso")
-    assert s.available is False
+    assert s.available is True
     assert s.native_value == 412
 
 

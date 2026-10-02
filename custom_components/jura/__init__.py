@@ -185,7 +185,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _register_services(hass)
 
+    # Flipping the hidden "retain when offline" advanced option re-reads
+    # entry.options on the next entity state write, but a reload guarantees
+    # every entity reflects it immediately.
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+
     return True
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

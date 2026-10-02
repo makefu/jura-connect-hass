@@ -20,4 +20,8 @@ account.
 - Services for brewing, cleaning, descaling, filter-change, lock/unlock,
   restart, power-off — all destructive operations gated explicitly
 - Entities keep their last value when the machine is offline; a dedicated
-  connectivity sensor reports reachability
+  connectivity sensor reports reachability. Automations that need the
+  pre-1.0.0 behavior (all entities `unavailable` on a confirmed outage)
+  can restore it via the hidden **Configure → Advanced settings →
+  Retain last values when offline** toggle (`retain_when_offline`
+  config-entry option).

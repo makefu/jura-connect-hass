@@ -21,7 +21,14 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+    OptionsFlowWithConfigEntry,
+)
+from homeassistant.core import callback
+from homeassistant.helpers.selector import BooleanSelector
 
 from .backends.base import DiscoveredMachine, JuraAuthError, JuraBackendError
 from .backends.jura import JuraConnectBackend, discover_machines, machine_type_from_article
@@ -32,7 +39,9 @@ from .const import (
     CONF_MACHINE_TYPE,
     CONF_PIN,
     CONF_PORT,
+    CONF_RETAIN_WHEN_OFFLINE,
     DEFAULT_PORT,
+    DEFAULT_RETAIN_WHEN_OFFLINE,
     DOMAIN,
     MACHINE_TYPE_NONE,
     SELECTION_MANUAL,
@@ -55,6 +64,12 @@ class JuraConfigFlow(ConfigFlow, domain=DOMAIN):
     # and there's deliberately no migration path — old entries will fail
     # to load and prompt the user to re-add.
     VERSION = 2
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: Any) -> OptionsFlow:
+        """Expose the hidden advanced options under the integration card."""
+        return JuraOptionsFlow(config_entry)
 
     def __init__(self) -> None:
         self._discovered: list[DiscoveredMachine] = []
@@ -293,3 +308,36 @@ class JuraConfigFlow(ConfigFlow, domain=DOMAIN):
         data = {**self._connection, CONF_AUTH_HASH: self._auth_hash}
         title = f"Jura {self._connection[CONF_HOST]}"
         return self.async_create_entry(title=title, data=data)
+
+
+class JuraOptionsFlow(OptionsFlowWithConfigEntry):
+    """Hidden advanced options.
+
+    HA hides fields whose voluptuous description declares ``advanced: true``
+    behind the "Advanced settings" disclosure in the config UI, so the toggle
+    stays out of the way until someone opens it.
+    """
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        if user_input is not None:
+            return self.async_create_entry(title="", data=dict(user_input))
+
+        current = bool(
+            self.config_entry.options.get(
+                CONF_RETAIN_WHEN_OFFLINE,
+                self.config_entry.data.get(CONF_RETAIN_WHEN_OFFLINE, DEFAULT_RETAIN_WHEN_OFFLINE),
+            )
+        )
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_RETAIN_WHEN_OFFLINE,
+                    default=current,
+                    description={
+                        "advanced": True,
+                        "selector": BooleanSelector(),
+                    },
+                ): bool,
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=schema)

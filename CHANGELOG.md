@@ -4,6 +4,32 @@ All notable changes to this integration are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] — 2026-10-02
+
+### Changed
+
+- **BREAKING**: entities no longer flip to `unavailable` when the machine
+  goes offline. All value-bearing entities (status, brew counters,
+  brew total, maintenance counters, percents, machine type, alert
+  binary sensors, settings selects/numbers) keep rendering their
+  **last-known value** through an outage; the OFFLINE snapshot only
+  drives `binary_sensor.<slug>_connectivity`. Previously a confirmed
+  outage marked every entity unavailable, which blanked dashboards and
+  broke templates reading `states('sensor.…_brews_total')`. Automations
+  that gated on entity availability must now gate on the connectivity
+  sensor instead (e.g.
+  `is_state('binary_sensor.<slug>_connectivity', 'on')`).
+  - **Escape hatch**: the previous behavior is restorable via the
+    hidden *Advanced settings → Retain last values when offline* toggle
+    in the integration's Configure dialog (stored as the
+    `retain_when_offline` config-entry option; uncheck it to return to
+    per-entity `unavailable` on outage).
+
+### Added
+
+- Hidden options flow (Configure → Advanced settings) exposing the
+  `retain_when_offline` boolean; changing it reloads the entry.
+
 ## [0.11.0] — 2026-10-02
 
 ### Added

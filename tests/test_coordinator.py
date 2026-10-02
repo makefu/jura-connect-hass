@@ -196,7 +196,8 @@ async def test_async_update_data_offline_on_first_poll_returns_minimal_snapshot(
 async def test_outage_never_exposes_zero_brew_total(mock_backend, fake_config_entry, sample_snapshot):
     """End-to-end proof of the reported bug: good poll (brews_total=809) ->
     sustained outage -> the snapshot the entities see keeps 809 and is flagged
-    OFFLINE, so BrewTotalSensor renders unavailable and resumes at 809 on wake."""
+    OFFLINE. Since 1.0.0 the entity keeps rendering 809 through the outage
+    (retain-when-offline is the default) instead of going unavailable."""
     from custom_components.jura.sensor import BrewTotalSensor
 
     coordinator = _make_coordinator(mock_backend, fake_config_entry)
@@ -215,7 +216,7 @@ async def test_outage_never_exposes_zero_brew_total(mock_backend, fake_config_en
         assert entity.native_value == 809
 
     assert coordinator.data.handshake_state == HANDSHAKE_STATE_OFFLINE
-    assert entity.available is False
+    assert entity.available is True
 
 
 def test_is_offline_error_classifies_library_timeout():

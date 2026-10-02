@@ -136,10 +136,32 @@ class ConfigFlow(metaclass=_ConfigFlowMeta):
         return ConfigFlowResult(type="abort", reason=reason)
 
 
+class OptionsFlow:
+    pass
+
+
+class OptionsFlowWithConfigEntry(OptionsFlow):
+    def __init__(self, config_entry=None):
+        self.config_entry = config_entry
+
+    def async_show_form(self, *, step_id, data_schema=None, errors=None, description_placeholders=None):
+        return ConfigFlowResult(
+            type="form",
+            step_id=step_id,
+            data_schema=data_schema,
+            errors=errors or {},
+            description_placeholders=description_placeholders or {},
+        )
+
+    def async_create_entry(self, *, title, data):
+        return ConfigFlowResult(type="create_entry", title=title, data=data)
+
+
 class ConfigEntry:
-    def __init__(self, entry_id="test_entry_id", data=None):
+    def __init__(self, entry_id="test_entry_id", data=None, options=None):
         self.entry_id = entry_id
         self.data = data or {}
+        self.options = options or {}
         self._unload_callbacks: list = []
 
     def async_on_unload(self, func):
@@ -152,7 +174,27 @@ _make_module(
     ConfigEntry=ConfigEntry,
     ConfigFlow=ConfigFlow,
     ConfigFlowResult=ConfigFlowResult,
+    OptionsFlow=OptionsFlow,
+    OptionsFlowWithConfigEntry=OptionsFlowWithConfigEntry,
 )
+
+
+class BooleanSelector(dict):
+    def __init__(self, config=None):
+        super().__init__(config or {})
+
+
+class SelectSelector(dict):
+    def __init__(self, config=None):
+        super().__init__(config or {})
+
+
+class SelectSelectorMode(str, Enum):
+    DROPDOWN = "dropdown"
+    LIST = "list"
+
+
+_make_module("homeassistant.helpers.selector", BooleanSelector=BooleanSelector, SelectSelector=SelectSelector)
 
 
 # --- homeassistant.exceptions ---

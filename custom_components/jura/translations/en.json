@@ -56,6 +56,17 @@
         },
         "abort": {
             "already_configured": "This machine is already configured."
+        },
+        "options": {
+            "step": {
+                "init": {
+                    "title": "Advanced settings",
+                    "description": "Behaviour options for this machine.",
+                    "data": {
+                        "retain_when_offline": "Retain last values when offline"
+                    }
+                }
+            }
         }
     },
     "entity": {

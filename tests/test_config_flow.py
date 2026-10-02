@@ -335,3 +335,53 @@ async def test_pair_failed_submit_retries(flow):
     assert result["type"] == "progress"
     assert result["step_id"] == "pair_progress"
     pending.cancel()
+
+
+# ---------------------------------------------------------------------------
+# options flow (hidden advanced settings)
+# ---------------------------------------------------------------------------
+
+
+async def test_options_flow_form_shows_advanced_retention_field(fake_config_entry):
+    from custom_components.jura.config_flow import JuraOptionsFlow
+    from custom_components.jura.const import CONF_RETAIN_WHEN_OFFLINE
+
+    flow = JuraOptionsFlow(fake_config_entry)
+    result = await flow.async_step_init()
+    assert result["type"] == "form"
+    assert result["step_id"] == "init"
+    schema = result["data_schema"]
+    field = next(v for v in schema.schema if v == CONF_RETAIN_WHEN_OFFLINE)
+    assert field.description["advanced"] is True
+    assert result  # hidden behind the Advanced disclosure, default on
+
+
+async def test_options_flow_submit_persists_option(fake_config_entry):
+    from custom_components.jura.config_flow import JuraOptionsFlow
+    from custom_components.jura.const import CONF_RETAIN_WHEN_OFFLINE
+
+    flow = JuraOptionsFlow(fake_config_entry)
+    result = await flow.async_step_init({CONF_RETAIN_WHEN_OFFLINE: False})
+    assert result["type"] == "create_entry"
+    assert result["data"] == {CONF_RETAIN_WHEN_OFFLINE: False}
+
+
+async def test_options_flow_defaults_from_data_override(fake_config_entry):
+    """Entries that carry the flag in data (YAML-era override) pre-select it."""
+    from custom_components.jura.config_flow import JuraOptionsFlow
+    from custom_components.jura.const import CONF_RETAIN_WHEN_OFFLINE
+
+    fake_config_entry.data[CONF_RETAIN_WHEN_OFFLINE] = False
+    flow = JuraOptionsFlow(fake_config_entry)
+    result = await flow.async_step_init()
+    schema = result["data_schema"]
+    field = next(v for v in schema.schema if v == CONF_RETAIN_WHEN_OFFLINE)
+    default = field.default() if callable(field.default) else field.default
+    assert default is False
+
+
+def test_config_flow_registers_options_flow(fake_config_entry):
+    from custom_components.jura.config_flow import JuraOptionsFlow
+
+    flow = JuraOptionsFlow(fake_config_entry)
+    assert flow.config_entry is fake_config_entry

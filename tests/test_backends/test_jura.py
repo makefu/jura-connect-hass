@@ -55,6 +55,8 @@ async def test_fetch_round_trip(running_simulator):
     assert snapshot.percents["cleaning"] == 0x50
     assert snapshot.percents["filter_change"] == 0xFF
     assert snapshot.percents["descale"] == 0x1E
+    assert snapshot.progress is None
+    assert snapshot.blocked_products == ()
 
 
 async def test_fetch_includes_brews_and_machine_type(running_simulator):
@@ -77,6 +79,25 @@ async def test_fetch_includes_brews_and_machine_type(running_simulator):
     # Machine-type fields are populated from the EF code
     assert snapshot.machine_type == "EF1091"
     assert snapshot.machine_type_name  # friendly name resolved
+
+
+async def test_fetch_marks_brews_unavailable_when_counter_read_fails(running_simulator, monkeypatch):
+    """A @TR:32 read failure yields brews_total=None (unavailable), not a fake 0."""
+
+    def raise_timeout(self, *args, **kwargs):
+        raise TimeoutError("no reply to '@TR:32'")
+
+    monkeypatch.setattr(jura_connect.JuraClient, "read_product_counters", raise_timeout)
+    host, port = running_simulator.address
+    backend = JuraConnectBackend(host, port, conn_id="ha-test", machine_type="EF1091")
+    await backend.pair()
+
+    snapshot = await backend.fetch()
+
+    assert snapshot.brews_total is None
+    assert snapshot.brews == {}
+    # The rest of the snapshot is unaffected — maintenance counters still arrive.
+    assert snapshot.counters["cleaning"] == 0x0015
 
 
 async def test_fetch_without_machine_type_still_succeeds(running_simulator):
@@ -107,6 +128,101 @@ async def test_fetch_exposes_severity_tuples(running_simulator):
     assert snapshot.process  # tuple non-empty
     # And the union should match active_alerts.
     assert set(snapshot.active_alerts) == set(snapshot.errors + snapshot.info + snapshot.process)
+
+
+async def test_fetch_surfaces_blocked_products(running_simulator):
+    """The default simulator frame sets bit 10 (no beans), which EF1091's
+    profile declares as Blocked="C CM" — the profile-aware blocking must
+    reach the snapshot so the brew button can gate on it."""
+    host, port = running_simulator.address
+    backend = JuraConnectBackend(host, port, conn_id="ha-test", machine_type="EF1091")
+    await backend.pair()
+
+    snapshot = await backend.fetch()
+
+    assert "no_beans" in snapshot.active_alerts
+    assert "espresso" in snapshot.blocked_products  # kind C
+    assert "cappuccino" in snapshot.blocked_products  # kind CM also blocked by no_beans
+    assert "milk_foam" not in snapshot.blocked_products  # kind M stays brewable
+
+
+async def test_follow_brew_progress():
+    """@TP: ack + @TV: progress stream decode end-to-end through the backend."""
+    from jura_connect import load_profile
+
+    cfg = simulator.SimulatorConfig(require_user_accept=False, allow_brew=True)
+    with simulator.run_in_thread(cfg) as sim:
+        host, port = sim.address
+        backend = JuraConnectBackend(host, port, conn_id="ha-test")
+        await backend.pair()
+        recipe = load_profile("EF1091").product_by_code[0x02].build_recipe_hex({})
+
+        result = await backend.follow_brew(recipe)
+
+    assert "ack" in result
+    frames = result["frames"]
+    assert frames
+    assert frames[-1]["state"] == "ENJOY"
+    for frame in frames:
+        assert "percent" in frame
+        assert "product" in frame
+
+
+async def test_follow_brew_refused(running_simulator):
+    """Without allow_brew the simulator refuses @TP: — surfaced as an error."""
+    from custom_components.jura.backends.base import JuraBackendError
+    from jura_connect import load_profile
+
+    host, port = running_simulator.address
+    backend = JuraConnectBackend(host, port, conn_id="ha-test")
+    await backend.pair()
+    recipe = load_profile("EF1091").product_by_code[0x02].build_recipe_hex({})
+
+    with pytest.raises(JuraBackendError, match="refused"):
+        await backend.follow_brew(recipe)
+
+
+async def test_run_named_special_counters_unsupported_machine(running_simulator):
+    """No profile => the bank read is asked and @tr:00 means 'not implemented';
+    the command degrades to a text explanation instead of raising."""
+    host, port = running_simulator.address
+    backend = JuraConnectBackend(host, port, conn_id="ha-test")
+    await backend.pair()
+
+    result = await backend.run_named("special-counters")
+    assert isinstance(result["value"], str)
+    assert "does not implement" in result["value"]
+
+
+async def test_run_named_special_counters_decodes_bank():
+    """EF1106 declares the @TR:52 bank; the served slots decode to the named sums."""
+    host_cfg = simulator.SimulatorConfig(
+        require_user_accept=False,
+        # Slots per SPECIAL_COUNTER_SLOTS: sweet_foam=(3,), cold_brew=(4,5,6),
+        # strong_cold_brew=(9,), light_brew=(12,13,14). 0xFFFF = unconfigured.
+        special_counters=[0xFFFF, 0xFFFF, 0xFFFF, 3, 4, 5, 5, 0xFFFF, 0xFFFF, 9, 0xFFFF, 0xFFFF, 13, 14, 12],
+    )
+    with simulator.run_in_thread(host_cfg) as sim:
+        host, port = sim.address
+        backend = JuraConnectBackend(host, port, conn_id="ha-test", machine_type="EF1106")
+        await backend.pair()
+
+        result = await backend.run_named("special-counters")
+
+    value = result["value"]
+    assert isinstance(value, dict), value
+    assert value["by_name"] == {"sweet_foam": 3, "cold_brew": 14, "strong_cold_brew": 9, "light_brew": 39}
+
+
+async def test_run_named_milk_cooler_status(running_simulator):
+    """@HU? stays ungated; the decode lands in the service response shape."""
+    host, port = running_simulator.address
+    backend = JuraConnectBackend(host, port, conn_id="ha-test")
+    await backend.pair()
+
+    result = await backend.run_named("milk-cooler-status")
+    assert result["value"]["raw"] == "800"
+    assert result["value"]["state"] == "no_cooler"
 
 
 async def test_fetch_reads_settings_when_profile_configured(running_simulator):

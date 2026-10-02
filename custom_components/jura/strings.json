@@ -63,6 +63,9 @@
             "status": {
                 "name": "Status"
             },
+            "brew_progress": {
+                "name": "Brew progress"
+            },
             "machine_type": {
                 "name": "Machine type"
             },
@@ -166,6 +169,9 @@
             },
             "cappu_rinse_alert": {
                 "name": "Cappu rinse alert"
+            },
+            "cappu_clean_alert": {
+                "name": "Clean milk system"
             },
             "heating_up": {
                 "name": "Heating up"

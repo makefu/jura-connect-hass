@@ -43,6 +43,7 @@ def _mock_coordinator() -> MagicMock:
     coordinator = MagicMock()
     coordinator.async_request_refresh = AsyncMock()
     coordinator.run_command = AsyncMock(return_value={"name": "test", "value": "ok"})
+    coordinator.run_brew = AsyncMock(return_value={"ack": "@tp", "frames": []})
     return coordinator
 
 
@@ -113,7 +114,7 @@ async def test_force_update_handler_triggers_refresh():
     coordinator.async_request_refresh.assert_awaited_once()
 
 
-async def test_brew_handler_passes_recipe_and_allow_destructive():
+async def test_brew_handler_follows_brew_progress():
     coordinator = _mock_coordinator()
     hass = _hass_with_coordinator(coordinator)
     _register_services(hass)
@@ -123,26 +124,53 @@ async def test_brew_handler_passes_recipe_and_allow_destructive():
     call.data = {"config_entry_id": "test_entry_id", "recipe": "01"}
     result = await handler(call)
 
-    coordinator.run_command.assert_awaited_once_with("brew", ["01"], allow_destructive=True)
-    assert result == {"name": "test", "value": "ok"}
+    coordinator.run_brew.assert_awaited_once_with("01")
+    assert result == {"ack": "@tp", "frames": []}
 
 
-async def test_command_services_dispatch_with_destructive_allowed():
+async def test_command_services_dispatch_respect_gate_flags():
     coordinator = _mock_coordinator()
     hass = _hass_with_coordinator(coordinator)
     _register_services(hass)
 
-    for service_name, command_name in _COMMAND_SERVICES.items():
+    for service_name, (command_name, allow_destructive) in _COMMAND_SERVICES.items():
         handler = hass.services._registered[(DOMAIN, service_name)]["handler"]
         call = MagicMock()
         call.data = {"config_entry_id": "test_entry_id"}
         await handler(call)
+        coordinator.run_command.assert_awaited_with(command_name, [], allow_destructive=allow_destructive)
 
-    # The last call should be the last service handler invocation
     assert coordinator.run_command.await_count == len(_COMMAND_SERVICES)
-    # Every call must have allow_destructive=True
-    for call_args in coordinator.run_command.await_args_list:
-        assert call_args.kwargs["allow_destructive"] is True
+    ungated = {name for name, (_cmd, gate) in _COMMAND_SERVICES.items() if not gate}
+    assert {"cancel", "milk_cooler_status", "special_counters"} <= ungated
+
+
+async def test_skip_quality_step_passes_scope():
+    coordinator = _mock_coordinator()
+    hass = _hass_with_coordinator(coordinator)
+    _register_services(hass)
+
+    entry = hass.services._registered[(DOMAIN, "skip_quality_step")]
+    call = MagicMock()
+    call.data = entry["schema"]({"config_entry_id": "test_entry_id", "scope": "all"})
+    await entry["handler"](call)
+    coordinator.run_command.assert_awaited_once_with("skip-quality-step", ["all"], allow_destructive=True)
+
+    # default scope is "one"
+    call.data = entry["schema"]({"config_entry_id": "test_entry_id"})
+    await entry["handler"](call)
+    coordinator.run_command.assert_awaited_with("skip-quality-step", ["one"], allow_destructive=True)
+
+    with pytest.raises(vol.Invalid):
+        entry["schema"]({"config_entry_id": "test_entry_id", "scope": "both"})
+
+
+def test_new_services_registered():
+    coordinator = _mock_coordinator()
+    hass = _hass_with_coordinator(coordinator)
+    _register_services(hass)
+    for service_name in ("cancel", "skip_quality_step", "milk_cooler_status", "restart_dongle", "special_counters"):
+        assert (DOMAIN, service_name) in hass.services._registered
 
 
 async def test_async_setup_entry_prewarms_profile_off_event_loop(monkeypatch):

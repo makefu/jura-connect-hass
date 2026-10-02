@@ -25,6 +25,9 @@ jobs:
       - name: Unit tests
         run: nix develop -c pytest tests/ -v
 
+      - name: Brew card tests
+        run: nix build .#checks.x86_64-linux.brew-card
+
       - name: Build package
         run: nix build
 

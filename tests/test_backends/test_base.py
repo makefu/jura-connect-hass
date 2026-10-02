@@ -15,6 +15,9 @@ def test_machine_snapshot_defaults():
     assert s.counters == {}
     assert s.percents == {}
     assert s.raw_status_hex == ""
+    # Absent statistics bank must read as unknown, never a fabricated 0 —
+    # total_increasing counters would look reset.
+    assert s.brews_total is None
 
 
 def test_discovered_machine_default_via():

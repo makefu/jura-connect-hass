@@ -26,6 +26,7 @@ from jura_connect import (
     scan_tcp,
     tcp_probe,
 )
+from jura_connect.client import BREW_REPLY_MATCH
 
 from .base import (
     DiscoveredMachine,
@@ -138,21 +139,20 @@ class JuraConnectBackend(JuraBackend):
                     brews = dict(counters.by_name)
                 except Exception as err:  # noqa: BLE001
                     _LOGGER.debug("product counters unavailable: %s", err)
-                    brews_total = 0
+                    brews_total = None
                     brews = {}
-                # Settings (per profile). Each read is one extra round
-                # trip — 7 settings on EF1091 add ~350ms. Skip cleanly
-                # when no profile is configured. ``list_settings`` and
-                # ``get_setting`` were added in jura_connect 0.9.4 and
-                # are the canonical name-based read path; both refuse
-                # to run if no profile is loaded.
+                # Settings (per profile). One batch @TM:00,FC bank read
+                # with per-setting fallback inside the library — a single
+                # round trip for profiles that declare the bank. Skip
+                # cleanly when no profile is configured (read_all_settings
+                # raises RuntimeError without one).
                 settings_values: dict[str, str] = {}
                 if self._profile is not None:
-                    for setting in client.list_settings():
-                        try:
-                            settings_values[setting.name] = client.get_setting(setting.name).raw
-                        except Exception as err:  # noqa: BLE001
-                            _LOGGER.debug("setting %s unavailable: %s", setting.name, err)
+                    try:
+                        snap = client.read_all_settings()
+                        settings_values = {r.name: r.raw for r in snap.readings if r.name}
+                    except Exception as err:  # noqa: BLE001
+                        _LOGGER.debug("settings read unavailable: %s", err)
             except HandshakeError as err:
                 raise JuraAuthError(str(err)) from err
             except OSError as err:
@@ -167,25 +167,18 @@ class JuraConnectBackend(JuraBackend):
                 errors=info.status.errors,
                 info=info.status.info,
                 process=info.status.process,
-                counters={
-                    "cleaning": info.maintenance_counters.cleaning,
-                    "filter_change": info.maintenance_counters.filter_change,
-                    "descale": info.maintenance_counters.descale,
-                    "cappu_rinse": info.maintenance_counters.cappu_rinse,
-                    "coffee_rinse": info.maintenance_counters.coffee_rinse,
-                    "cappu_clean": info.maintenance_counters.cappu_clean,
-                },
-                percents={
-                    "cleaning": info.maintenance_percent.cleaning,
-                    "filter_change": info.maintenance_percent.filter_change,
-                    "descale": info.maintenance_percent.descale,
-                },
+                # Wire-order decoded name/value pairs; counters the
+                # machine doesn't report are simply absent (not zero).
+                counters=dict(info.maintenance_counters.counters),
+                percents=dict(info.maintenance_percent.percent),
                 raw_status_hex=info.status.raw.hex().upper(),
                 brews=brews,
                 brews_total=brews_total,
                 machine_type=self.machine_type,
                 machine_type_name=self._machine_type_name,
                 settings=settings_values,
+                blocked_products=tuple(info.status.blocked_products),
+                progress=None,
             )
 
         return await asyncio.to_thread(_do)
@@ -271,6 +264,34 @@ class JuraConnectBackend(JuraBackend):
             finally:
                 client.close()
             return result.to_dict()
+
+        return await asyncio.to_thread(_do)
+
+    async def follow_brew(self, recipe_hex: str, *, follow_seconds: float = 120.0) -> dict[str, Any]:
+        """Send ``@TP:<recipe>`` and watch ``@TV:`` progress until ENJOY/timeout.
+
+        The session stays open for the whole dispense, so the coordinator
+        suppresses offline classification while this runs. Returns
+        ``{"ack": str, "frames": [ProductProgress.to_dict()...]}``.
+        """
+
+        def _do() -> dict[str, Any]:
+            client = self._make_client()
+            try:
+                handshake = client.connect()
+                if handshake.state != "CORRECT":
+                    raise JuraAuthError(f"handshake state {handshake.state}")
+                ack = client.request(f"@TP:{recipe_hex}", match=BREW_REPLY_MATCH, timeout=self.read_timeout)
+                if ack.lower().startswith("@an:error"):
+                    raise JuraBackendError(f"machine refused brew: {ack}")
+                frames = [p.to_dict() for p in client.follow_progress(timeout=follow_seconds)]
+            except HandshakeError as err:
+                raise JuraAuthError(str(err)) from err
+            except OSError as err:
+                raise JuraBackendError(f"I/O error talking to machine: {err}") from err
+            finally:
+                client.close()
+            return {"ack": ack, "frames": frames}
 
         return await asyncio.to_thread(_do)
 

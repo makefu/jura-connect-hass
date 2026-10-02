@@ -36,7 +36,10 @@ class MachineSnapshot:
     # Empty dict if the machine doesn't support the @TR:32 statistics
     # bank (e.g. TT237W V06.11 reports zero pages).
     brews: dict[str, int] = field(default_factory=dict)
-    brews_total: int = 0
+    # None when the @TR:32 statistics bank could not be read this poll
+    # (machine asleep mid-standby, unsupported firmware, read timeout) —
+    # the entity goes unavailable instead of reporting a false 0.
+    brews_total: int | None = None
     # Machine variant identification. ``machine_type`` is the EF code
     # ("EF1091" for an S8 EB) configured for the integration;
     # ``machine_type_name`` is the catalogue's friendly name
@@ -49,6 +52,14 @@ class MachineSnapshot:
     # Empty if no profile is configured or the machine doesn't expose
     # the requested setting.
     settings: dict[str, str] = field(default_factory=dict)
+    # Lowercase profile product names the machine refuses right now
+    # (derived by the library from profile-declared blocking alerts).
+    # Used to gate the brew button so it goes unavailable instead of
+    # erroring when the machine won't dispense the selected product.
+    blocked_products: tuple[str, ...] = ()
+    # Last @TV: ProductProgress.to_dict() seen from a followed brew
+    # (see coordinator.run_brew). None until a brew has been followed.
+    progress: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -88,6 +99,13 @@ class JuraBackend(ABC):
     @abstractmethod
     async def unlock(self) -> None:
         """Unlock the front-panel display."""
+
+    @abstractmethod
+    async def follow_brew(self, recipe_hex: str, *, follow_seconds: float = 120.0) -> dict[str, Any]:
+        """Start a brew from a raw recipe hex and follow its ``@TV:`` progress stream.
+
+        Returns ``{"ack": str, "frames": [ProductProgress.to_dict()...]}``.
+        """
 
     @abstractmethod
     async def run_named(

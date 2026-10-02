@@ -140,6 +140,16 @@
                 HOME=$TMPDIR PYTHONPATH=${self} pytest tests/ -v
                 touch $out
               '';
+          brew-card =
+            pkgs.runCommand "brew-card-tests"
+              {
+                nativeBuildInputs = [ pkgs.nodejs_22 ];
+              }
+              ''
+                cd ${self}
+                node --test tests/test_brew_card.mjs
+                touch $out
+              '';
         }
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
           vm-test = import ./nix/vm-test.nix {

@@ -18,6 +18,8 @@ def serialize_snapshot(snapshot: MachineSnapshot) -> dict[str, Any]:
         "counters": dict(snapshot.counters),
         "percents": {k: percent_value(v) for k, v in snapshot.percents.items()},
         "raw_status_hex": snapshot.raw_status_hex,
+        "blocked_products": list(snapshot.blocked_products),
+        "progress": snapshot.progress,
     }
 
 

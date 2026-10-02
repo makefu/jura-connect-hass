@@ -32,6 +32,7 @@ async def async_setup_entry(
 
     entities: list[SensorEntity] = [
         StateSensor(coordinator, config_entry),
+        BrewProgressSensor(coordinator, config_entry),
         MachineTypeSensor(coordinator, config_entry),
         BrewTotalSensor(coordinator, config_entry),
     ]
@@ -99,6 +100,38 @@ class StateSensor(JuraEntity, SensorEntity):
         if snapshot is None:
             return {}
         return serialize_snapshot(snapshot)
+
+
+class BrewProgressSensor(JuraEntity, SensorEntity):
+    """Last progress state of a followed brew (GRINDING_COFFEE ... ENJOY).
+
+    State is the ``state`` string from the latest ``@TV:`` frame seen by
+    ``coordinator.run_brew``; the whole decoded frame rides along as
+    attributes (percent, product, actual/maximum). ``None`` until a brew
+    has been followed since HA started.
+    """
+
+    _attr_translation_key = "brew_progress"
+    _attr_icon = "mdi:coffee-maker-outline"
+
+    def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry) -> None:
+        super().__init__(coordinator, config_entry)
+        self._attr_unique_id = f"{DOMAIN}_{self._slug}_brew_progress"
+
+    @property
+    def native_value(self) -> str | None:
+        snapshot = _snapshot(self.coordinator)
+        if snapshot is None or snapshot.progress is None:
+            return None
+        state = snapshot.progress.get("state")
+        return str(state) if state is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        snapshot = _snapshot(self.coordinator)
+        if snapshot is None or snapshot.progress is None:
+            return {}
+        return dict(snapshot.progress)
 
 
 class CounterSensor(JuraEntity, SensorEntity):

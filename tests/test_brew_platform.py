@@ -6,7 +6,7 @@ carrying a "Factory Default" sentinel), and a single brew button.
 Selections are staged on ``coordinator.brew_selection``; the button reads
 them and builds the recipe via the ``jura_connect`` library. Per-product
 choices persist across restarts via ``coordinator.brew_prefs``. Nothing
-talks to a machine — ``run_command`` is mocked, so no live brew happens.
+talks to a machine — ``run_brew`` is mocked, so no live brew happens.
 
 These exercise the real EF1091 (S8) bundled profile so the option lists,
 defaults and payload vectors are pinned against actual machine data. The
@@ -18,6 +18,7 @@ tests — here we assert the *wiring* funnels the staged selection into
 
 from __future__ import annotations
 
+import dataclasses
 from unittest.mock import AsyncMock
 
 import pytest
@@ -84,7 +85,7 @@ def _coordinator(entry: ConfigEntry | None = None) -> JuraCoordinator:
     entry = entry or _entry()
     backend = AsyncMock()
     coordinator = JuraCoordinator(AsyncMock(), entry, backend=backend)
-    coordinator.run_command = AsyncMock(return_value={"name": "brew", "value": "ok"})
+    coordinator.run_brew = AsyncMock(return_value={"ack": "@tp", "frames": []})
     coordinator.data = None
     return coordinator
 
@@ -360,15 +361,28 @@ def test_button_name_and_unique_id():
     assert button.unique_id.endswith("homeassistant_test_brew")
 
 
+def test_button_unavailable_while_product_blocked(sample_snapshot):
+    """A machine-declared blocking alert for the staged product's kind
+    makes the brew button unavailable instead of erroring on press."""
+    coordinator = _coordinator()  # espresso (kind C) selected
+    button = JuraBrewButton(coordinator, _entry())
+    coordinator.data = sample_snapshot
+    assert button.available is True
+    coordinator.data = dataclasses.replace(sample_snapshot, blocked_products=("espresso",))
+    assert button.available is False
+    coordinator.data = dataclasses.replace(sample_snapshot, blocked_products=("latte_macchiato",))
+    assert button.available is True
+
+
 async def test_button_press_espresso_factory_default_vector():
     """espresso, all Factory Default -> the library's default recipe blob."""
     coordinator = _coordinator()  # espresso selected, all params None
     button = JuraBrewButton(coordinator, _entry())
     await button.async_press()
     expected = _recipe(0x02)
-    coordinator.run_command.assert_awaited_once_with("brew", [expected], allow_destructive=True)
-    # The recipe must NOT carry the @TP: prefix (the library re-adds it).
-    sent = coordinator.run_command.await_args.args[1][0]
+    coordinator.run_brew.assert_awaited_once_with(expected)
+    # The recipe must NOT carry the @TP: prefix (the backend adds it).
+    sent = coordinator.run_brew.await_args.args[0]
     assert not sent.startswith("@TP:")
 
 
@@ -396,7 +410,7 @@ async def test_button_press_coffee_override_vector_via_selection_path():
         0x03,
         {KIND_COFFEE_STRENGTH: 2, KIND_WATER_AMOUNT: 130, KIND_TEMPERATURE: 1},
     )
-    coordinator.run_command.assert_awaited_once_with("brew", [expected], allow_destructive=True)
+    coordinator.run_brew.assert_awaited_once_with(expected)
 
 
 async def test_button_press_cappuccino_milk_foam_override_vector():
@@ -412,7 +426,7 @@ async def test_button_press_cappuccino_milk_foam_override_vector():
     await button.async_press()
 
     expected = _recipe(0x04, {KIND_MILK_FOAM_AMOUNT: 12})
-    coordinator.run_command.assert_awaited_once_with("brew", [expected], allow_destructive=True)
+    coordinator.run_brew.assert_awaited_once_with(expected)
 
 
 # ---------------------------------------------------------------------------

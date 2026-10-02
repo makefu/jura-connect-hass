@@ -227,3 +227,86 @@ restart:
       selector:
         entity:
           integration: jura
+
+cancel:
+  name: Cancel
+  description: Cancel the current process or brew on the machine.
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      selector:
+        entity:
+          integration: jura
+
+skip_quality_step:
+  name: Skip Quality Step
+  description: >-
+    Skip the current quality-assistant step. Irreversibly skips a
+    quality-assistant step; has been seen to zero maintenance counters.
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      selector:
+        entity:
+          integration: jura
+    scope:
+      name: Scope
+      description: >-
+        "one" skips the current step, "all" skips the whole quality
+        assistant. Defaults to "one".
+      selector:
+        text:
+
+milk_cooler_status:
+  name: Milk Cooler Status
+  description: >-
+    Read the milk-cooler temperature (requires a machine with smart milk
+    cooler support). Returns the reading as the service response.
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      selector:
+        entity:
+          integration: jura
+
+restart_dongle:
+  name: Restart Dongle
+  description: Reboot the WiFi dongle. The integration reconnects automatically.
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      selector:
+        entity:
+          integration: jura
+
+special_counters:
+  name: Special Counters
+  description: >-
+    Read the special-function counters (sweet foam, cold brew, ...).
+    Returns the decoded counters as the service response.
+  fields:
+    config_entry_id:
+      name: Config Entry ID
+      selector:
+        text:
+    entity_id:
+      name: Entity
+      selector:
+        entity:
+          integration: jura

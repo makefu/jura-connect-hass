@@ -57,6 +57,7 @@ def _hass_with_coordinator(coordinator) -> MagicMock:
 def _mock_coordinator(machine_type: str = "EF1091") -> MagicMock:
     coordinator = MagicMock()
     coordinator.run_command = AsyncMock(return_value={"name": "brew", "value": "ok"})
+    coordinator.run_brew = AsyncMock(return_value={"ack": "@tp", "frames": []})
     config_entry = MagicMock()
     config_entry.data = {CONF_MACHINE_TYPE: machine_type, CONF_HOST: "192.0.2.10", CONF_CONN_ID: "x"}
     coordinator.config_entry = config_entry
@@ -102,7 +103,7 @@ async def test_brew_by_product_uses_xml_defaults():
     call = MagicMock()
     call.data = {"config_entry_id": "test_entry_id", "product": "espresso_doppio"}
     await _brew_handler(hass)(call)
-    coordinator.run_command.assert_awaited_once_with("brew", [_DEFAULT_RECIPE], allow_destructive=True)
+    coordinator.run_brew.assert_awaited_once_with(_DEFAULT_RECIPE)
 
 
 async def test_brew_by_product_with_overrides():
@@ -118,7 +119,7 @@ async def test_brew_by_product_with_overrides():
         "temperature": 1,
     }
     await _brew_handler(hass)(call)
-    coordinator.run_command.assert_awaited_once_with("brew", [_OVERRIDE_RECIPE], allow_destructive=True)
+    coordinator.run_brew.assert_awaited_once_with(_OVERRIDE_RECIPE)
 
 
 async def test_brew_by_product_with_milk_foam_override():
@@ -133,7 +134,7 @@ async def test_brew_by_product_with_milk_foam_override():
         "milk_foam_s": 12,
     }
     await _brew_handler(hass)(call)
-    coordinator.run_command.assert_awaited_once_with("brew", [_MILK_FOAM_RECIPE], allow_destructive=True)
+    coordinator.run_brew.assert_awaited_once_with(_MILK_FOAM_RECIPE)
 
 
 async def test_brew_by_product_code_resolves():
@@ -144,7 +145,7 @@ async def test_brew_by_product_code_resolves():
     call = MagicMock()
     call.data = {"config_entry_id": "test_entry_id", "product": "30"}
     await _brew_handler(hass)(call)
-    coordinator.run_command.assert_awaited_once_with("brew", [_DEFAULT_RECIPE], allow_destructive=True)
+    coordinator.run_brew.assert_awaited_once_with(_DEFAULT_RECIPE)
 
 
 async def test_brew_by_product_out_of_range_water_raises():
@@ -157,7 +158,7 @@ async def test_brew_by_product_out_of_range_water_raises():
     call.data = {"config_entry_id": "test_entry_id", "product": "espresso_doppio", "water_ml": 99999}
     with pytest.raises(ValueError):
         await _brew_handler(hass)(call)
-    coordinator.run_command.assert_not_awaited()
+    coordinator.run_brew.assert_not_awaited()
 
 
 async def test_brew_unknown_product_raises():
@@ -182,7 +183,7 @@ async def test_brew_legacy_recipe_path_preserved():
     call = MagicMock()
     call.data = {"config_entry_id": "test_entry_id", "recipe": "01"}
     await _brew_handler(hass)(call)
-    coordinator.run_command.assert_awaited_once_with("brew", ["01"], allow_destructive=True)
+    coordinator.run_brew.assert_awaited_once_with("01")
 
 
 async def test_brew_rejects_product_and_recipe_together():

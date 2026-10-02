@@ -52,6 +52,11 @@ HANDSHAKE_STATE_OFFLINE = "OFFLINE"
 # not flap the connectivity sensor. A real outage still flips after N polls.
 OFFLINE_TOLERANCE = 2
 
+# A followed brew keeps its TCP session open for the whole dispense, so
+# polls during that window hit a busy dongle and fail — that is our own
+# session, not an outage. See _handle_offline_poll.
+FOLLOW_BREW_SECONDS = 120.0
+
 # errno values that mean "the machine isn't answering" — connection
 # refused, host/network unreachable, timeouts. Anything else (EACCES,
 # EBADF, …) is a programming error and should still surface as
@@ -82,6 +87,7 @@ _OFFLINE_MESSAGE_HINTS: tuple[str, ...] = (
     "no route to host",
     "host is down",
     "network is unreachable",
+    "no pushed @tf:",
 )
 
 
@@ -177,6 +183,9 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
         self._session_lock = asyncio.Lock()
         # Consecutive offline-classified poll failures; see OFFLINE_TOLERANCE.
         self._consecutive_offline = 0
+        # True while a followed brew holds the session; suppresses offline
+        # classification for polls that collide with it.
+        self._follow_brew_active = False
 
     @staticmethod
     def _load_brew_profile(config_entry: ConfigEntry) -> MachineProfile | None:
@@ -275,11 +284,13 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
         """Synthesise an OFFLINE snapshot.
 
         Reuses the prior snapshot (counters, brews, settings, identity)
-        when one exists so entities keep showing last-known values, and
-        flips ``handshake_state`` to the OFFLINE sentinel so the
-        connectivity binary_sensor can surface the reachability flip.
-        On the very first poll (no prior data) we return a minimal
-        snapshot keyed by the configured address + conn_id.
+        when one exists so last-known values are retained internally, and
+        flips ``handshake_state`` to the OFFLINE sentinel: entities render
+        that as ``unavailable`` (never as zeros), while the connectivity
+        binary_sensor surfaces the reachability flip. On the very first
+        poll (no prior data) we return a minimal snapshot keyed by the
+        configured address + conn_id — with ``brews_total`` left at its
+        ``None`` default rather than a fabricated 0.
         """
         prior = self.data
         if prior is not None:
@@ -311,12 +322,20 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
     def _handle_offline_poll(self, err: BaseException) -> MachineSnapshot:
         """Classify an offline poll: tolerate a transient blip, else go OFFLINE.
 
+        While our own followed-brew session owns the socket, a failed poll
+        is expected — keep serving the last snapshot (or synthesise one if
+        there is none yet) instead of counting it toward the outage streak.
+
         The dongle serves one TCP session at a time, so a poll that races a
         brew/command session (or hits the machine mid-dispense) fails even
         though the machine is reachable. Below OFFLINE_TOLERANCE we keep serving
         the last good snapshot so connectivity does not flap; only a sustained
         failure (or no prior data) surfaces the OFFLINE snapshot.
         """
+        if self._follow_brew_active:
+            if self.data is not None:
+                return self.data
+            return self._offline_snapshot()
         self._consecutive_offline += 1
         if self._consecutive_offline < OFFLINE_TOLERANCE and self.data is not None:
             _LOGGER.debug(
@@ -354,6 +373,25 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
             raise UpdateFailed(f"backend error: {err}") from err
 
         await self.async_request_refresh()
+        return result
+
+    async def run_brew(self, recipe: str, *, follow_seconds: float = FOLLOW_BREW_SECONDS) -> dict[str, Any]:
+        """Start a brew and follow its progress stream, then refresh state.
+
+        Blocks for the duration of the dispense (bounded by
+        ``follow_seconds``) because the ``@TV:`` stream needs the session
+        open. Polls colliding with it are not treated as an outage.
+        """
+        async with self._session_lock:
+            self._follow_brew_active = True
+            try:
+                result = await self.backend.follow_brew(recipe, follow_seconds=follow_seconds)
+            finally:
+                self._follow_brew_active = False
+        await self.async_request_refresh()
+        frames = result.get("frames") or []
+        if self.data is not None:
+            self.async_set_updated_data(dataclasses.replace(self.data, progress=frames[-1] if frames else None))
         return result
 
     async def write_setting(self, name: str, value: str) -> None:

@@ -15,7 +15,7 @@ import dataclasses
 
 from custom_components.jura.binary_sensor import AlertBinarySensor, ConnectivityBinarySensor
 from custom_components.jura.coordinator import HANDSHAKE_STATE_OFFLINE
-from custom_components.jura.sensor import CounterSensor, PercentSensor, StateSensor
+from custom_components.jura.sensor import BrewTotalSensor, CounterSensor, MachineTypeSensor, PercentSensor, StateSensor
 
 
 def _coordinator(*, data, last_update_success: bool = True) -> MagicMock:
@@ -102,6 +102,27 @@ def test_connectivity_sensor_reports_off_when_snapshot_handshake_offline(sample_
     offline_snapshot = dataclasses.replace(sample_snapshot, handshake_state=HANDSHAKE_STATE_OFFLINE)
     coordinator = _coordinator(data=offline_snapshot, last_update_success=True)
     assert ConnectivityBinarySensor(coordinator, fake_config_entry).is_on is False
+
+
+def test_all_entities_unavailable_on_offline_snapshot(sample_snapshot, fake_config_entry):
+    """Confirmed outage: everything except connectivity goes unavailable,
+    keeping last values inside the snapshot so counters resume on wake."""
+    offline = dataclasses.replace(sample_snapshot, handshake_state=HANDSHAKE_STATE_OFFLINE)
+    coordinator = _coordinator(data=offline, last_update_success=True)
+
+    for entity in (
+        StateSensor(coordinator, fake_config_entry),
+        CounterSensor(coordinator, fake_config_entry, "cleaning"),
+        PercentSensor(coordinator, fake_config_entry, "cleaning"),
+        BrewTotalSensor(coordinator, fake_config_entry),
+        MachineTypeSensor(coordinator, fake_config_entry),
+        AlertBinarySensor(coordinator, fake_config_entry, "heating_up", "running"),
+    ):
+        assert entity.available is False, type(entity).__name__
+
+    conn = ConnectivityBinarySensor(coordinator, fake_config_entry)
+    assert conn.available is True
+    assert conn.is_on is False
 
 
 def test_connectivity_sensor_unique_id_distinct_from_alerts(fake_config_entry, sample_snapshot):

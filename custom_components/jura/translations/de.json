@@ -4,6 +4,9 @@
             "status": {
                 "name": "Status"
             },
+            "brew_progress": {
+                "name": "Brew-Fortschritt"
+            },
             "machine_type": {
                 "name": "Maschinentyp"
             },
@@ -107,6 +110,9 @@
             },
             "cappu_rinse_alert": {
                 "name": "Cappuccino-Spülwarnung"
+            },
+            "cappu_clean_alert": {
+                "name": "Reinigung Milchsystem"
             },
             "heating_up": {
                 "name": "Wird aufgeheizt"

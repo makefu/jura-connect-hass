@@ -1,0 +1,75 @@
+# Changelog
+
+All notable changes to this integration are documented here. The format
+follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
+version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.11.0] — 2026-10-02
+
+### Added
+
+- Brew-progress sensor (`sensor.<slug>_brew_progress`): state is the
+  latest `@TV:` progress state (`GRINDING_COFFEE` … `ENJOY`), attributes
+  carry the whole decoded frame including `percent` and `product`.
+- New services: `jura.cancel`, `jura.skip_quality_step` (scope `one`/`all`),
+  `jura.milk_cooler_status`, `jura.restart_dongle`, `jura.special_counters`.
+  The read-only ones return the library dict as the service response.
+- Brew button goes unavailable while the machine blocks the selected
+  product, instead of erroring on press.
+- Binary sensor for the "Clean milk system" prompt
+  (`binary_sensor.<slug>_alert_cappu_clean_alert`): the JURA shows it
+  after every milk drink, J.O.E. mirrors it — it was missing here.
+  Needs jura_connect 0.14.0, which decodes alert bit 41
+  (`cappu_clean_alert`) even for machines paired without a
+  `machine_type`. Fixes #17.
+
+- Per-snapshot `blocked_products` + `progress` attributes on the status
+  sensor.
+
+### Changed
+
+- `jura_connect >= 0.14.0`.
+- Maintenance counter/percent maps now carry exactly the counters the
+  machine reports; a missing counter means the entity is unavailable
+  instead of showing a wrong zero.
+- Settings are read via the batch `@TM:00,FC` bank with per-setting
+  fallback — fewer round trips per poll.
+- The brew service and button follow the `@TV:` progress stream until
+  `ENJOY` (the session stays open up to 120 s; connectivity does not
+  flap during that window).
+
+### Fixed
+
+- Milk-sensor alert binary sensors keep working with machine profiles
+  (upstream jura_connect 0.13.1 restores the canonical profile alert
+  names this integration keys on).
+- Brew card offline state is now driven by the
+  `binary_sensor.<machine>_connectivity` entity: when the machine is
+  unreachable the card shows a grey *Offline* pill, a "brewing
+  unavailable" note, and disables the sliders + Brew button, instead of
+  wrongly reporting "Online" off the brew button's retained
+  `last_press` timestamp. It no longer misreports when the entity
+  registry assigned the connectivity/status entities a different slug
+  than the brew entities (registry reassignment on rename): the card
+  matches a machine's entities by slug token, so a lone `machine:
+  <slug>` pin keeps working across such drift; zero-config mode falls
+  back to suffix-matching.
+- The card file is served with a long `Cache-Control`; bump the
+  `/local/jura-brew-card.js?v=…` query in the dashboard resource after
+  each card update, or browsers keep the stale copy for a month.
+
+## Earlier history
+
+Recorded highlights (see `git log` for the full history):
+
+### [0.10.0]
+
+- Milk and milk-foam brew axes (F5/F6) over jura_connect 0.11.0;
+  redesigned brew card; serialized machine I/O with debounced offline
+  handling.
+
+### [0.8.1] and earlier
+
+- HA-native translations + German locale; per-recipe brew counters;
+  machine-settings entities; offline surfacing on every poll; initial
+  release as a Home Assistant custom component.

@@ -16,6 +16,21 @@ def test_serialize_snapshot_round_trip(sample_snapshot):
     assert data["percents"]["filter_change"] is None
     assert data["percents"]["cleaning"] == 80
     assert data["raw_status_hex"] == "0010000000000000"
+    assert data["blocked_products"] == []
+    assert data["progress"] is None
+
+
+def test_serialize_snapshot_blocked_and_progress(sample_snapshot):
+    import dataclasses
+
+    snap = dataclasses.replace(
+        sample_snapshot,
+        blocked_products=("espresso", "coffee"),
+        progress={"state": "ENJOY", "percent": 100},
+    )
+    data = serialize_snapshot(snap)
+    assert data["blocked_products"] == ["espresso", "coffee"]
+    assert data["progress"] == {"state": "ENJOY", "percent": 100}
 
 
 def test_percent_value_translates_absent_sentinel():

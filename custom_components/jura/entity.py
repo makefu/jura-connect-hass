@@ -8,7 +8,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_CONN_ID, CONF_HOST, DOMAIN
-from .coordinator import JuraCoordinator
+from .coordinator import HANDSHAKE_STATE_OFFLINE, JuraCoordinator
 
 
 class JuraEntity(CoordinatorEntity[JuraCoordinator]):
@@ -35,7 +35,10 @@ class JuraEntity(CoordinatorEntity[JuraCoordinator]):
 
     @property
     def available(self) -> bool:
-        # Machines are routinely offline — keep the last-known snapshot visible
-        # instead of flipping every sensor to "unavailable" on a failed poll.
-        # The connectivity binary_sensor is the canonical reachability signal.
-        return self.coordinator.data is not None
+        # Keep the last-known snapshot internally (counters resume at the same
+        # value when the machine wakes), but surface "unavailable" once the
+        # coordinator has confirmed an outage — otherwise total_increasing
+        # counters look like they reset to 0 or freeze stale values as live.
+        # ConnectivityBinarySensor overrides this: it is the reachability signal.
+        snapshot = self.coordinator.data
+        return snapshot is not None and snapshot.handshake_state != HANDSHAKE_STATE_OFFLINE

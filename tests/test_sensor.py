@@ -8,8 +8,10 @@ from unittest.mock import MagicMock
 
 from custom_components.jura import sensor as jura_sensor
 from custom_components.jura.const import COUNTER_KEYS, DOMAIN, PERCENT_KEYS, STATE_IDLE
+from custom_components.jura.coordinator import HANDSHAKE_STATE_OFFLINE
 from custom_components.jura.sensor import (
     BrewCounterSensor,
+    BrewProgressSensor,
     BrewTotalSensor,
     CounterSensor,
     MachineTypeSensor,
@@ -70,6 +72,32 @@ def test_counter_sensors_created_for_each_key(sample_snapshot, fake_config_entry
 def test_counter_sensor_none_without_data(fake_config_entry):
     s = CounterSensor(_make_coordinator(None), fake_config_entry, "cleaning")
     assert s.native_value is None
+
+
+def test_counter_sensor_unreported_key_is_available_as_none(sample_snapshot, fake_config_entry):
+    """A machine that reports only four counters: the missing key yields
+    None (entity unavailable), NOT a wrong zero."""
+    snap = replace(sample_snapshot, counters={k: v for k, v in sample_snapshot.counters.items() if k != "cappu_clean"})
+    s = CounterSensor(_make_coordinator(snap), fake_config_entry, "cappu_clean")
+    assert s.native_value is None
+    # the reported ones still read through
+    ok = CounterSensor(_make_coordinator(snap), fake_config_entry, "cleaning")
+    assert ok.native_value == 21
+
+
+def test_brew_progress_sensor_state_and_attrs(sample_snapshot, fake_config_entry):
+    progress = {"state": "ENJOY", "percent": 100, "product": "espresso"}
+    snap = replace(sample_snapshot, progress=progress)
+    s = BrewProgressSensor(_make_coordinator(snap), fake_config_entry)
+    assert s.native_value == "ENJOY"
+    assert s.extra_state_attributes == progress
+    assert s.unique_id.endswith("brew_progress")
+
+
+def test_brew_progress_sensor_none_without_progress(sample_snapshot, fake_config_entry):
+    s = BrewProgressSensor(_make_coordinator(sample_snapshot), fake_config_entry)
+    assert s.native_value is None
+    assert s.extra_state_attributes == {}
 
 
 def test_percent_sensor_translates_absent_to_none(sample_snapshot, fake_config_entry):
@@ -166,8 +194,25 @@ def test_brew_total_sensor_reports_total(sample_snapshot, fake_config_entry):
 
 
 def test_brew_total_zero_on_machines_without_statistics(empty_snapshot, fake_config_entry):
+    """A successful poll whose statistics bank reads empty is a real 0."""
     s = BrewTotalSensor(_make_coordinator(empty_snapshot), fake_config_entry)
     assert s.native_value == 0
+
+
+def test_brew_total_unavailable_but_keeps_value_when_offline(sample_snapshot, fake_config_entry):
+    """OFFLINE snapshot: entity is unavailable yet keeps the last-known total —
+    the anti-0-spike invariant for total_increasing counters."""
+    offline = replace(sample_snapshot, handshake_state=HANDSHAKE_STATE_OFFLINE)
+    s = BrewTotalSensor(_make_coordinator(offline), fake_config_entry)
+    assert s.available is False
+    assert s.native_value == 809
+
+
+def test_brew_counter_unavailable_but_keeps_value_when_offline(sample_snapshot, fake_config_entry):
+    offline = replace(sample_snapshot, handshake_state=HANDSHAKE_STATE_OFFLINE)
+    s = BrewCounterSensor(_make_coordinator(offline), fake_config_entry, "espresso")
+    assert s.available is False
+    assert s.native_value == 412
 
 
 def test_setup_entry_spawns_brew_sensors_when_machine_comes_online(fake_config_entry, empty_snapshot, sample_snapshot):

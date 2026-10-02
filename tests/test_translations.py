@@ -41,7 +41,7 @@ def en() -> dict:
 # Translation keys the code registers, grouped by platform. Keep this in
 # lock-step with the *_attr_translation_key* values set in the platforms.
 def _expected_keys() -> dict[str, set[str]]:
-    sensor = {"status", "machine_type", "brew_total", "brew_counter"}
+    sensor = {"status", "machine_type", "brew_total", "brew_counter", "brew_progress"}
     sensor |= {f"counter_{k}" for k in COUNTER_KEYS}
     sensor |= {f"percent_{k}" for k in PERCENT_KEYS}
     binary_sensor = {"connectivity", *ALERT_BINARY_SENSORS.keys()}

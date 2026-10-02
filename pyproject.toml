@@ -4,17 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ha-jura-connect"
-version = "0.10.0"
+version = "0.11.0"
 requires-python = ">=3.13"
 dependencies = [
-    "jura_connect>=0.11.0",
+    "jura_connect>=0.14.0",
 ]
 
 [tool.setuptools.packages.find]
 include = ["custom_components*"]
 
 [tool.setuptools.package-data]
-"custom_components.jura" = ["manifest.json", "services.yaml", "strings.json"]
+"custom_components.jura" = ["manifest.json", "services.yaml", "strings.json", "translations/*.json"]
 
 [project.scripts]
 jura-connect-ha = "custom_components.jura.cli:main"

@@ -50,20 +50,30 @@ if _HAS_HOMEASSISTANT:
     SERVICE_CAPPU_CLEAN = "cappu_clean"
     SERVICE_POWER_OFF = "power_off"
     SERVICE_RESTART = "restart"
+    SERVICE_CANCEL = "cancel"
+    SERVICE_SKIP_QUALITY_STEP = "skip_quality_step"
+    SERVICE_MILK_COOLER_STATUS = "milk_cooler_status"
+    SERVICE_RESTART_DONGLE = "restart_dongle"
+    SERVICE_SPECIAL_COUNTERS = "special_counters"
 
-    # Map HA service name -> jura_connect command name. Every entry runs with
-    # ``allow_destructive=True`` because the user invoked the dedicated service
-    # explicitly; the named service *is* the opt-in.
-    _COMMAND_SERVICES: dict[str, str] = {
-        SERVICE_LOCK_SCREEN: "lock",
-        SERVICE_UNLOCK_SCREEN: "unlock",
-        SERVICE_CLEAN: "clean",
-        SERVICE_DESCALE: "descale",
-        SERVICE_FILTER_CHANGE: "filter-change",
-        SERVICE_CAPPU_RINSE: "cappu-rinse",
-        SERVICE_CAPPU_CLEAN: "cappu-clean",
-        SERVICE_POWER_OFF: "power-off",
-        SERVICE_RESTART: "restart",
+    # Map HA service name -> (jura_connect command name, allow_destructive).
+    # Gated entries run with allow_destructive=True because the user invoked
+    # the dedicated service explicitly; the named service *is* the opt-in.
+    # Ungated entries are read-only or harmless.
+    _COMMAND_SERVICES: dict[str, tuple[str, bool]] = {
+        SERVICE_LOCK_SCREEN: ("lock", True),
+        SERVICE_UNLOCK_SCREEN: ("unlock", True),
+        SERVICE_CLEAN: ("clean", True),
+        SERVICE_DESCALE: ("descale", True),
+        SERVICE_FILTER_CHANGE: ("filter-change", True),
+        SERVICE_CAPPU_RINSE: ("cappu-rinse", True),
+        SERVICE_CAPPU_CLEAN: ("cappu-clean", True),
+        SERVICE_POWER_OFF: ("power-off", True),
+        SERVICE_RESTART: ("restart", True),
+        SERVICE_CANCEL: ("cancel", False),
+        SERVICE_MILK_COOLER_STATUS: ("milk-cooler-status", False),
+        SERVICE_RESTART_DONGLE: ("restart-dongle", True),
+        SERVICE_SPECIAL_COUNTERS: ("special-counters", False),
     }
 
     # brew_service call-data axis -> library recipe-param kind.
@@ -98,6 +108,8 @@ if _HAS_HOMEASSISTANT:
             vol.Optional("milk_foam_s"): vol.Coerce(int),
         }
     )
+
+    SKIP_QUALITY_SCHEMA = _BASE_TARGET_SCHEMA.extend({vol.Optional("scope", default="one"): vol.In(["one", "all"])})
 
 
 def _find_product(machine_type: str | None, name: str) -> ProductDef | None:
@@ -214,7 +226,7 @@ def _register_services(hass: HomeAssistant) -> None:
             recipe = product.build_recipe_hex(overrides)
         elif not recipe:
             raise vol.Invalid("Provide either product or recipe")
-        return await coordinator.run_command("brew", [recipe], allow_destructive=True)
+        return await coordinator.run_brew(recipe)
 
     hass.services.async_register(
         DOMAIN,
@@ -231,22 +243,48 @@ def _register_services(hass: HomeAssistant) -> None:
         supports_response=SupportsResponse.OPTIONAL,
     )
 
-    for service_name, command_name in _COMMAND_SERVICES.items():
-        _register_command_service(hass, service_name, command_name)
+    for service_name, (command_name, allow_destructive) in _COMMAND_SERVICES.items():
+        _register_command_service(hass, service_name, command_name, allow_destructive=allow_destructive)
+
+    _register_skip_quality_step_service(hass)
 
 
-def _register_command_service(hass: HomeAssistant, service_name: str, command_name: str) -> None:
-    """Register one config-entry-targeted no-arg command service."""
+def _register_command_service(
+    hass: HomeAssistant,
+    service_name: str,
+    command_name: str,
+    *,
+    allow_destructive: bool = True,
+) -> None:
+    """Register one config-entry-targeted command service (no call-data args)."""
 
     async def handler(call: ServiceCall) -> ServiceResponse:
         config_entry_id = _resolve_config_entry_id(hass, call.data)
         coordinator = _get_coordinator(hass, config_entry_id)
-        return await coordinator.run_command(command_name, [], allow_destructive=True)
+        return await coordinator.run_command(command_name, [], allow_destructive=allow_destructive)
 
     hass.services.async_register(
         DOMAIN,
         service_name,
         handler,
         schema=_BASE_TARGET_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+
+
+def _register_skip_quality_step_service(hass: HomeAssistant) -> None:
+    """Register ``skip_quality_step`` — the one command service with an argument."""
+
+    async def handler(call: ServiceCall) -> ServiceResponse:
+        config_entry_id = _resolve_config_entry_id(hass, call.data)
+        coordinator = _get_coordinator(hass, config_entry_id)
+        scope = str(call.data.get("scope", "one"))
+        return await coordinator.run_command("skip-quality-step", [scope], allow_destructive=True)
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SKIP_QUALITY_STEP,
+        handler,
+        schema=SKIP_QUALITY_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
     )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest.mock import MagicMock
 
 from custom_components.jura.binary_sensor import AlertBinarySensor, ConnectivityBinarySensor
@@ -64,3 +65,13 @@ def test_alert_uses_alert_name_as_translation_key(sample_snapshot, fake_config_e
 def test_connectivity_sensor_is_diagnostic(sample_snapshot, fake_config_entry):
     sensor = ConnectivityBinarySensor(_coordinator(sample_snapshot), fake_config_entry)
     assert sensor.entity_category == EntityCategory.DIAGNOSTIC
+
+
+def test_clean_milk_system_alert_is_mapped(sample_snapshot, fake_config_entry):
+    """jura-connect-hass#17: the J8 'clean milk system' prompt (bit 41,
+    ``cappu_clean_alert``) must surface as its own problem entity."""
+    assert ALERT_BINARY_SENSORS["cappu_clean_alert"] == "problem"
+    snapshot = replace(sample_snapshot, active_alerts=("cappu_clean_alert",))
+    sensor = AlertBinarySensor(_coordinator(snapshot), fake_config_entry, "cappu_clean_alert", "problem")
+    assert sensor.is_on is True
+    assert sensor.entity_category is None

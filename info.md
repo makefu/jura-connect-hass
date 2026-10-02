@@ -8,7 +8,7 @@ account.
 
 **Features:**
 - Auto-discovery of machines on the local network
-- Per-machine profiles for 88 known JURA models (correct alert + brew names)
+- Per-machine profiles for 89 known JURA models (correct alert + brew names)
 - Status sensor + binary sensors for every alert (water, beans, drip tray,
   milk warning, …)
 - Per-recipe brew counters (espresso, coffee, cappuccino, …) plus a

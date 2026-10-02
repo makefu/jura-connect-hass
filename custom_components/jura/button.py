@@ -4,8 +4,9 @@ Pressing the button PHYSICALLY brews a drink. It reads the machine-wide
 ``coordinator.brew_selection`` (product + optional strength/water/temperature/milk
 staged by the brew selects), builds the bare recipe blob from the product's
 definition via the ``jura_connect`` library — a ``None`` parameter falls back
-to that product's XML default — and dispatches the library's ``brew`` command
-(with ``allow_destructive=True``; pressing the button is the explicit opt-in).
+to that product's XML default — and dispatches it through
+``coordinator.run_brew``, which follows the ``@TV:`` progress stream until
+the machine reports ``ENJOY``.
 """
 
 from __future__ import annotations
@@ -58,8 +59,9 @@ class JuraBrewButton(JuraEntity, ButtonEntity):
     """Brews the currently-selected product. **Pressing this physically brews.**
 
     Resolves ``coordinator.brew_selection`` to a product and parameter set,
-    builds the bare recipe blob (no ``@TP:`` prefix — the library's brew runner
-    re-adds it) and dispatches the ``brew`` command.
+    builds the bare recipe blob (no ``@TP:`` prefix — the backend's
+    follow-brew session adds it) and runs it via ``coordinator.run_brew``.
+    The button goes unavailable while the machine blocks the product.
     """
 
     def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry) -> None:
@@ -69,7 +71,13 @@ class JuraBrewButton(JuraEntity, ButtonEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.selected_product() is not None
+        product = self.coordinator.selected_product()
+        if product is None:
+            return False
+        data = self.coordinator.data
+        # The machine refuses blocked products right now; go unavailable
+        # instead of erroring when the user presses brew.
+        return data is None or product.name not in data.blocked_products
 
     async def async_press(self) -> None:
         product = self.coordinator.selected_product()
@@ -82,4 +90,4 @@ class JuraBrewButton(JuraEntity, ButtonEntity):
             if value is not None:
                 overrides[kind] = value
         recipe = product.build_recipe_hex(overrides)
-        await self.coordinator.run_command("brew", [recipe], allow_destructive=True)
+        await self.coordinator.run_brew(recipe)

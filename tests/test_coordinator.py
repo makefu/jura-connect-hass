@@ -90,6 +90,8 @@ async def test_async_update_data_offline_after_successful_poll_returns_offline_s
     assert snapshot.brews == sample_snapshot.brews
     assert snapshot.address == sample_snapshot.address
     assert snapshot.machine_type == sample_snapshot.machine_type
+    # Brew total carried through the OFFLINE replace — no 0 spike mid-outage.
+    assert snapshot.brews_total == sample_snapshot.brews_total
 
 
 async def test_async_update_data_transient_blip_keeps_last_snapshot(mock_backend, fake_config_entry, sample_snapshot):
@@ -188,6 +190,32 @@ async def test_async_update_data_offline_on_first_poll_returns_minimal_snapshot(
     assert snapshot.handshake_state == HANDSHAKE_STATE_OFFLINE
     assert snapshot.address == "192.0.2.10"
     assert snapshot.machine_type == "EF1091"
+    assert snapshot.brews_total is None
+
+
+async def test_outage_never_exposes_zero_brew_total(mock_backend, fake_config_entry, sample_snapshot):
+    """End-to-end proof of the reported bug: good poll (brews_total=809) ->
+    sustained outage -> the snapshot the entities see keeps 809 and is flagged
+    OFFLINE, so BrewTotalSensor renders unavailable and resumes at 809 on wake."""
+    from custom_components.jura.sensor import BrewTotalSensor
+
+    coordinator = _make_coordinator(mock_backend, fake_config_entry)
+    good = await coordinator._async_update_data()
+    coordinator.data = good
+    entity = BrewTotalSensor(coordinator, fake_config_entry)
+    assert entity.available is True
+    assert entity.native_value == 809
+
+    err = _wrap_backend_error(TimeoutError("no reply to '@HU?' within 6.0s"))
+    mock_backend.fetch.side_effect = err
+    for _ in range(OFFLINE_TOLERANCE):
+        coordinator.data = await coordinator._async_update_data()
+        # At no step during the outage does the counter read 0.
+        assert coordinator.data.brews_total == 809
+        assert entity.native_value == 809
+
+    assert coordinator.data.handshake_state == HANDSHAKE_STATE_OFFLINE
+    assert entity.available is False
 
 
 def test_is_offline_error_classifies_library_timeout():
@@ -241,6 +269,67 @@ async def test_run_command_backend_error_raises_update_failed(mock_backend, fake
     mock_backend.run_named.side_effect = JuraBackendError("timeout")
     with pytest.raises(UpdateFailed):
         await coordinator.run_command("clean", [], allow_destructive=True)
+
+
+# ---------------------------------------------------------------------------
+# run_brew — followed brew session
+# ---------------------------------------------------------------------------
+
+
+async def test_run_brew_refreshes_and_publishes_last_progress_frame(mock_backend, fake_config_entry, sample_snapshot):
+    coordinator = _make_coordinator(mock_backend, fake_config_entry)
+    mock_backend.follow_brew.return_value = {
+        "ack": "@tp",
+        "frames": [{"state": "GRINDING_COFFEE", "percent": 30}],
+    }
+    # Prime the coordinator with a first snapshot so replace() has a base.
+    coordinator.data = sample_snapshot
+
+    result = await coordinator.run_brew("01020304")
+
+    assert result["ack"] == "@tp"
+    mock_backend.follow_brew.assert_awaited_once_with("01020304", follow_seconds=120.0)
+    # The refresh ran, then the last frame landed in data.progress.
+    mock_backend.fetch.assert_awaited()
+    assert coordinator.data.progress == {"state": "GRINDING_COFFEE", "percent": 30}
+
+
+async def test_run_brew_clears_follow_flag_and_offline_suppression(mock_backend, fake_config_entry, sample_snapshot):
+    """While the brew session is open, a failed poll keeps the last snapshot
+    (our own session owns the socket — not an outage)."""
+    coordinator = _make_coordinator(mock_backend, fake_config_entry)
+    coordinator.data = sample_snapshot
+
+    async def _follow(*_args, **_kwargs):
+        assert coordinator._follow_brew_active is True
+        # Simulate a colliding poll: offline-classified failure.
+        snapshot = coordinator._handle_offline_poll(
+            _wrap_backend_error(TimeoutError("no pushed @TF: status frame within 10s"))
+        )
+        assert snapshot is mock_backend.fetch.return_value or snapshot.handshake_state != HANDSHAKE_STATE_OFFLINE
+        return {"ack": "@tp", "frames": []}
+
+    mock_backend.follow_brew.side_effect = _follow
+    await coordinator.run_brew("0102")
+    assert coordinator._follow_brew_active is False
+
+
+async def test_offline_poll_during_follow_brew_never_counts_toward_streak(
+    mock_backend, fake_config_entry, sample_snapshot
+):
+    coordinator = _make_coordinator(mock_backend, fake_config_entry)
+    coordinator.data = sample_snapshot
+    coordinator._follow_brew_active = True
+    err = _wrap_backend_error(TimeoutError("no pushed @TF: status frame within 10s"))
+    snapshot = coordinator._handle_offline_poll(err)
+    assert snapshot is sample_snapshot
+    assert coordinator._consecutive_offline == 0
+
+
+def test_is_offline_error_classifies_pushed_tf_timeout():
+    """jura_connect 0.13's read_status timeout text classifies as offline."""
+    err = _wrap_backend_error(TimeoutError("no pushed @TF: status frame within 10s"))
+    assert _is_offline_error(err) is True
 
 
 # ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@ Two families of selects live here:
 * **Brew control panel** — a small, machine-wide set that stages the
   *next* brew: a product picker plus strength / water / temperature /
   grinder-ratio / milk / milk-foam selects. Each parameter select carries a
-  ``"Factory Default"`` option (meaning "let the recipe builder use the
+  translated ``factory_default`` option (meaning "let the recipe builder use the
   product's XML default" — it does
   NOT mean "use the machine's own configured setting", which JURA WiFi has
   no mechanism for) and recomputes its options from whichever product is
@@ -50,7 +50,7 @@ SELECT_KINDS = {"switch", "combobox", "item_slider"}
 # Sentinel option meaning "don't override — let the recipe builder use the
 # product's XML/factory default value". This is NOT "use the machine's own
 # stored setting": JURA WiFi exposes no such mechanism.
-FACTORY_DEFAULT = "Factory Default"
+FACTORY_DEFAULT = "factory_default"
 
 
 async def async_setup_entry(
@@ -165,16 +165,17 @@ class BrewProductSelect(JuraEntity, SelectEntity):
 
     Selecting a product makes its Code the staged product and hydrates
     strength/water/temperature from that product's *saved preferences*
-    (each missing param falls back to "Factory Default"). It then asks the
+    (each missing param falls back to the translated factory-default option).
+    It then asks the
     coordinator to refresh listeners so the dependent parameter selects
     re-render their (product-specific) options and loaded values.
     """
 
     _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "brew_product"
 
     def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry) -> None:
         super().__init__(coordinator, config_entry)
-        self._attr_name = "Brew Product"
         self._attr_unique_id = f"{DOMAIN}_{self._slug}_brew_product"
 
     @property
@@ -215,7 +216,8 @@ class _BrewParamSelect(JuraEntity, SelectEntity):
     temperature / grinder ratio / milk / milk foam). Options always lead with
     :data:`FACTORY_DEFAULT`; the value lives on
     ``coordinator.brew_selection[<key>]`` where ``None`` means
-    "Factory Default" (send the product's XML default). Changing the value
+    the translated factory-default option (send the product's XML default).
+    Changing the value
     also remembers it for the current product (``coordinator.brew_prefs``) and
     schedules a persistent save. The select is unavailable while the selected
     product doesn't expose the parameter.
@@ -315,6 +317,7 @@ class BrewStrengthSelect(_ItemBrewSelect):
     _param_kind = KIND_COFFEE_STRENGTH
     _selection_key = "strength"
     _name_suffix = "Strength"
+    _attr_translation_key = "brew_strength"
 
 
 class BrewTempSelect(_ItemBrewSelect):
@@ -323,6 +326,7 @@ class BrewTempSelect(_ItemBrewSelect):
     _param_kind = KIND_TEMPERATURE
     _selection_key = "temp"
     _name_suffix = "Temperature"
+    _attr_translation_key = "brew_temperature"
 
 
 class BrewGrinderRatioSelect(_ItemBrewSelect):
@@ -368,6 +372,7 @@ class BrewWaterSelect(_RangeBrewSelect):
     _param_kind = KIND_WATER_AMOUNT
     _selection_key = "water_ml"
     _name_suffix = "Water"
+    _attr_translation_key = "brew_water"
 
 
 class BrewMilkSelect(_RangeBrewSelect):
@@ -380,6 +385,7 @@ class BrewMilkSelect(_RangeBrewSelect):
     _param_kind = KIND_MILK_AMOUNT
     _selection_key = "milk_s"
     _name_suffix = "Milk"
+    _attr_translation_key = "brew_milk"
 
 
 class BrewMilkFoamSelect(_RangeBrewSelect):
@@ -388,3 +394,4 @@ class BrewMilkFoamSelect(_RangeBrewSelect):
     _param_kind = KIND_MILK_FOAM_AMOUNT
     _selection_key = "milk_foam_s"
     _name_suffix = "Milk Foam"
+    _attr_translation_key = "brew_milk_foam"

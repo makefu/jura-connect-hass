@@ -82,7 +82,7 @@ function loadCard() {
 // brew entities under `kuche_kaffeebert`, connectivity/status under
 // `kaffeebert`, machine offline (connectivity = off, status = unavailable).
 const driftedStates = {
-  "select.kuche_kaffeebert_brew_product": { entity_id: "select.kuche_kaffeebert_brew_product", state: "espresso", attributes: { options: ["Factory Default", "espresso"] } },
+  "select.kuche_kaffeebert_brew_product": { entity_id: "select.kuche_kaffeebert_brew_product", state: "espresso", attributes: { options: ["espresso"] } },
   "button.kuche_kaffeebert_brew": { entity_id: "button.kuche_kaffeebert_brew", state: "2026-07-12T09:26:16+00:00", attributes: {} },
   "binary_sensor.kaffeebert_connectivity": { entity_id: "binary_sensor.kaffeebert_connectivity", state: "off", attributes: {} },
   "sensor.kaffeebert_status": { entity_id: "sensor.kaffeebert_status", state: "unavailable", attributes: {} },
@@ -110,7 +110,7 @@ test("grinder ratio resolves with the same slug-drift rules", () => {
     "select.kuche_kaffeebert_brew_grinder_ratio": {
       entity_id: "select.kuche_kaffeebert_brew_grinder_ratio",
       state: "100_0",
-      attributes: { options: ["Factory Default", "100_0", "0_100"] },
+      attributes: { options: ["factory_default", "100_0", "0_100"] },
     },
   };
   const ids = card._resolveEntities({ states });

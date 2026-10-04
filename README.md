@@ -87,10 +87,14 @@ for reachability.
 Entity names use Home Assistant's native per-user translations, so each
 client sees them in its own UI language. English ships in `strings.json`
 (mirrored to `translations/en.json`); German (`de`) is fully translated in
-`translations/de.json`. The dynamic `Brew <recipe>` and `Setting <name>`
-entities translate their prefix and keep the machine-supplied name as a
-placeholder. To add a language, copy `translations/de.json` to
-`translations/<lang>.json` and translate the `name` values.
+`translations/de.json`. Brew controls also translate the EF566 product names,
+temperature levels and the locale-neutral `factory_default` state (shown as
+"Factory default" in English and "Standard" in German). Unknown product names
+from other machine profiles remain usable as their raw profile value. The
+dynamic `Brew <recipe>` and `Setting <name>` entities translate their prefix
+and keep the machine-supplied name as a placeholder. To add a language, copy
+`translations/de.json` to `translations/<lang>.json` and translate the `name`
+and `state` values.
 
 ### Lovelace brew card
 

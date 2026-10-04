@@ -31,7 +31,7 @@
  *   connectivity: binary_sensor.kuche_kaffeebert_connectivity
  *
  * The Strength / Water / Temperature sliders sit at their leftmost notch when
- * the parameter is "Factory Default" (the backend's option[0]) — reading that
+ * the parameter is "Factory Default" (the translated backend option[0]) — reading that
  * back correctly and, when the user never touches the slider, sending it back
  * unchanged so the machine brews the product's own default recipe.
  *
@@ -40,7 +40,8 @@
  */
 
 // The backend prepends this sentinel as option[0] on every parameter select.
-const FACTORY_DEFAULT = "Factory Default";
+const FACTORY_DEFAULT = "factory_default";
+const FACTORY_DEFAULT_LABEL = "Factory Default";
 
 const PARAM_ROWS = [
   { key: "strength", label: "Strength", icon: "mdi:coffee" },
@@ -476,7 +477,7 @@ class JuraBrewCard extends HTMLElement {
           const idx = Number(input.value);
           const isDef = idx === 0;
           rowEl.classList.toggle("is-default", isDef);
-          valEl.textContent = isDef ? FACTORY_DEFAULT : this._formatValue(row, opts[idx]);
+          valEl.textContent = isDef ? FACTORY_DEFAULT_LABEL : this._formatValue(row, opts[idx]);
           this._paintSlider(input, isDef);
         });
         // Release: commit the value (which sets a pending hold) and end the
@@ -511,7 +512,7 @@ class JuraBrewCard extends HTMLElement {
       input.value = String(idx);
       const isDef = idx === 0;
       rowEl.classList.toggle("is-default", isDef);
-      valEl.textContent = isDef ? FACTORY_DEFAULT : this._formatValue(row, options[idx]);
+      valEl.textContent = isDef ? FACTORY_DEFAULT_LABEL : this._formatValue(row, options[idx]);
       this._paintSlider(input, isDef);
     }
 

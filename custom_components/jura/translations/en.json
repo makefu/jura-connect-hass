@@ -243,14 +243,82 @@
             "setting": {
                 "name": "Setting {setting}"
             },
+            "brew_product": {
+                "name": "Brew product",
+                "state": {
+                    "espresso": "Espresso",
+                    "coffee": "Coffee",
+                    "cappuccino": "Cappuccino",
+                    "milkcoffee": "Milk coffee",
+                    "espresso_macchiato": "Espresso macchiato",
+                    "latte_macchiato": "Latte macchiato",
+                    "2_espressi": "2 espressos",
+                    "2_coffee": "2 coffees",
+                    "2_cappuccino": "2 cappuccinos",
+                    "2_milkcoffee": "2 milk coffees",
+                    "2_espresso_macchiato": "2 espresso macchiatos",
+                    "2_latte_macchiato": "2 latte macchiatos",
+                    "espresso_doppio": "Espresso doppio",
+                    "milk_foam": "Milk foam",
+                    "milk_portion": "Milk portion",
+                    "pot": "Pot",
+                    "hotwater_portion": "Hot water",
+                    "2_milk_foam": "2 milk foam portions",
+                    "2_milk_portion": "2 milk portions",
+                    "hotwater_portion_green_tea": "Hot water for green tea",
+                    "coffee_speed_1": "Coffee speed 1",
+                    "coffee_speed_2": "Coffee speed 2",
+                    "1_flat_white": "Flat white",
+                    "1_cortado": "Cortado",
+                    "2_coffee_speed_1": "2 coffees speed 1",
+                    "2_coffee_speed_2": "2 coffees speed 2",
+                    "2_cortado": "2 cortados",
+                    "2_flat_white": "2 flat whites",
+                    "powderproduct": "Powder product"
+                }
+            },
+            "brew_strength": {
+                "name": "Brew strength",
+                "state": {
+                    "factory_default": "Factory default"
+                }
+            },
+            "brew_water": {
+                "name": "Water amount",
+                "state": {
+                    "factory_default": "Factory default"
+                }
+            },
+            "brew_temperature": {
+                "name": "Brew temperature",
+                "state": {
+                    "factory_default": "Factory default",
+                    "low": "Low",
+                    "normal": "Normal",
+                    "high": "High"
+                }
+            },
             "brew_grinder_ratio": {
                 "name": "Grinder ratio",
                 "state": {
+                    "factory_default": "Factory default",
                     "100_0": "100% left : 0% right",
                     "75_25": "75% left : 25% right",
                     "50_50": "50% left : 50% right",
                     "25_75": "25% left : 75% right",
                     "0_100": "0% left : 100% right"
+                }
+            },
+            "brew_milk": {
+                "name": "Milk",
+                "state": {
+                    "factory_default": "Factory default"
+                }
+            },
+            "brew_milk_foam": {
+                "name": "Milk foam",
+                "state": {
+                    "factory_default": "Factory default"
                 }
             }
         },

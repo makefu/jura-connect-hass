@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 
 import pytest
+from jura_connect import load_profile
 
 from custom_components.jura.const import ALERT_BINARY_SENSORS, COUNTER_KEYS, PERCENT_KEYS
 
@@ -48,7 +49,16 @@ def _expected_keys() -> dict[str, set[str]]:
     return {
         "sensor": sensor,
         "binary_sensor": binary_sensor,
-        "select": {"setting", "brew_grinder_ratio"},
+        "select": {
+            "setting",
+            "brew_product",
+            "brew_strength",
+            "brew_water",
+            "brew_temperature",
+            "brew_grinder_ratio",
+            "brew_milk",
+            "brew_milk_foam",
+        },
         "number": {"setting"},
     }
 
@@ -111,8 +121,30 @@ def test_german_actually_translates(strings, de):
     assert de_alerts["fill_water"] == "Wasser nachfüllen"
     grinder = de["entity"]["select"]["brew_grinder_ratio"]
     assert grinder["name"] == "Mahlwerkverhältnis"
+    assert grinder["state"]["factory_default"] == "Standard"
     assert grinder["state"]["100_0"] == "100 % links : 0 % rechts"
     assert grinder["state"]["0_100"] == "0 % links : 100 % rechts"
+
+    product = de["entity"]["select"]["brew_product"]
+    assert product["name"] == "Getränk"
+    assert product["state"]["coffee"] == "Kaffee"
+    assert product["state"]["hotwater_portion"] == "Heisswasser"
+
+    temperature = de["entity"]["select"]["brew_temperature"]
+    assert temperature["name"] == "Temperatur"
+    assert temperature["state"]["factory_default"] == "Standard"
+    assert temperature["state"]["low"] == "Niedrig"
+    assert temperature["state"]["high"] == "Hoch"
+
+
+@pytest.mark.parametrize("catalog_name", ["strings.json", "translations/en.json", "translations/de.json"])
+def test_ef566_product_options_have_translations(catalog_name):
+    """Every product exposed by the tested twin-grinder profile is translated."""
+    catalog = _load(catalog_name)
+    translated = catalog["entity"]["select"]["brew_product"]["state"]
+    profile = load_profile("EF566")
+    missing = {product.name for product in profile.products} - translated.keys()
+    assert not missing, f"{catalog_name}: EF566 products missing translations {sorted(missing)}"
 
 
 def test_strings_and_en_mirror_match(strings, en):

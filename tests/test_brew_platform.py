@@ -46,6 +46,7 @@ from custom_components.jura.const import (  # noqa: E402
 )
 from custom_components.jura.coordinator import JuraCoordinator  # noqa: E402
 from custom_components.jura.select import (  # noqa: E402
+    FACTORY_DEFAULT,
     BrewGrinderRatioSelect,
     BrewMilkFoamSelect,
     BrewMilkSelect,
@@ -55,8 +56,6 @@ from custom_components.jura.select import (  # noqa: E402
     BrewWaterSelect,
 )
 from homeassistant.config_entries import ConfigEntry  # noqa: E402
-
-FACTORY_DEFAULT = "Factory Default"
 
 _PROFILE = load_profile("EF1091")
 # EF1091 product names, in profile order (the brewable product table).
@@ -123,6 +122,7 @@ def test_product_select_options_and_current(fake_config_entry):
     assert entity.current_option == "espresso"
     assert entity.entity_category == "config"
     assert entity.unique_id.endswith("brew_product")
+    assert entity._attr_translation_key == "brew_product"
 
 
 async def test_product_select_sets_code_and_loads_factory_default_params():
@@ -218,6 +218,7 @@ def test_strength_select_options_and_default():
     entity = BrewStrengthSelect(coordinator, _entry())
     assert entity.options == [FACTORY_DEFAULT, "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
     assert entity.current_option == FACTORY_DEFAULT
+    assert entity._attr_translation_key == "brew_strength"
     assert entity.available is True
     assert entity.entity_category == "config"
     assert entity.unique_id.endswith("brew_strength")
@@ -283,6 +284,7 @@ def test_temp_select_options_and_mapping():
     assert entity.options == [FACTORY_DEFAULT, "low", "normal", "high"]
     assert entity.current_option == FACTORY_DEFAULT
     assert entity.unique_id.endswith("brew_temp")
+    assert entity._attr_translation_key == "brew_temperature"
 
 
 async def test_temp_select_set_and_factory_default():
@@ -345,6 +347,10 @@ async def test_grinder_ratio_is_unavailable_for_product_without_f2():
     assert grinder.available is False
     assert grinder.current_option is None
     assert grinder.options == [FACTORY_DEFAULT]
+
+
+def test_factory_default_is_a_locale_neutral_state_key():
+    assert FACTORY_DEFAULT == "factory_default"
 
 
 # ---------------------------------------------------------------------------
@@ -514,14 +520,14 @@ def _is_setting_select(entity) -> bool:
 async def test_select_setup_builds_control_panel_not_per_product():
     added = await _setup("custom_components.jura.select")
     brew = [e for e in added if _is_brew_select(e)]
-    brew_names = {e.name for e in brew}
-    assert brew_names == {
-        "Brew Product",
-        "Brew Strength",
-        "Brew Water",
-        "Brew Temperature",
-        "Brew Milk",
-        "Brew Milk Foam",
+    translation_keys = {e._attr_translation_key for e in brew}
+    assert translation_keys == {
+        "brew_product",
+        "brew_strength",
+        "brew_water",
+        "brew_temperature",
+        "brew_milk",
+        "brew_milk_foam",
     }
     # Setting selects are still present...
     assert any(_is_setting_select(e) for e in added)

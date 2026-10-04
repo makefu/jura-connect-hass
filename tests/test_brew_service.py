@@ -28,7 +28,7 @@ from jura_connect import (  # noqa: E402
     load_profile,
 )
 
-from custom_components.jura import _register_services  # noqa: E402
+from custom_components.jura import BREW_SCHEMA, _register_services  # noqa: E402
 from custom_components.jura.const import CONF_CONN_ID, CONF_HOST, CONF_MACHINE_TYPE, DOMAIN  # noqa: E402
 
 _PROFILE = load_profile("EF1091")
@@ -68,6 +68,14 @@ def _mock_coordinator(machine_type: str = "EF1091") -> MagicMock:
 
 def _brew_handler(hass):
     return hass.services._registered[(DOMAIN, "brew")]["handler"]
+
+
+def _brew_call(hass, data: dict) -> MagicMock:
+    """Build a ServiceCall whose data passes through the registered
+    BREW_SCHEMA, like a real HA service call does."""
+    call = MagicMock()
+    call.data = BREW_SCHEMA(data)
+    return call
 
 
 # ---------------------------------------------------------------------------
@@ -144,17 +152,48 @@ async def test_brew_by_product_with_grinder_ratio_override():
     coordinator = _mock_coordinator("EF566")
     hass = _hass_with_coordinator(coordinator)
     _register_services(hass)
-    call = MagicMock()
-    call.data = {
-        "config_entry_id": "test_entry_id",
-        "product": "espresso",
-        "grinder_ratio": "0_100",
-    }
+    call = _brew_call(
+        hass,
+        {
+            "config_entry_id": "test_entry_id",
+            "product": "espresso",
+            "grinder_ratio": "0_100",
+        },
+    )
     await _brew_handler(hass)(call)
 
     espresso = load_profile("EF566").product_by_code[0x02]
     expected = espresso.build_recipe_hex({KIND_GRINDER_RATIO: "0_100"})
     coordinator.run_brew.assert_awaited_once_with(expected)
+
+
+async def test_brew_schema_preserves_grinder_ratio_item_names():
+    """vol.Any must not coerce documented item names like "100_0" to ints —
+    PEP-515 digit separators would turn them into 1000 and the catalogue
+    check would reject every documented value."""
+    validated = BREW_SCHEMA({"config_entry_id": "e", "product": "espresso", "grinder_ratio": "100_0"})
+    assert validated["grinder_ratio"] == "100_0"
+    validated = BREW_SCHEMA({"config_entry_id": "e", "product": "espresso", "grinder_ratio": 2})
+    assert validated["grinder_ratio"] == 2
+
+
+async def test_brew_grinder_ratio_rejected_on_single_grinder_machine():
+    """EF1091 products declare no F2 parameter: the service must raise
+    rather than brew a wrong recipe."""
+    coordinator = _mock_coordinator()
+    hass = _hass_with_coordinator(coordinator)
+    _register_services(hass)
+    call = _brew_call(
+        hass,
+        {
+            "config_entry_id": "test_entry_id",
+            "product": "espresso_doppio",
+            "grinder_ratio": "50_50",
+        },
+    )
+    with pytest.raises(ValueError, match="grinder_ratio"):
+        await _brew_handler(hass)(call)
+    coordinator.run_brew.assert_not_awaited()
 
 
 async def test_brew_by_product_code_resolves():

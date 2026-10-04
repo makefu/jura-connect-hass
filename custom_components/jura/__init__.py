@@ -106,7 +106,10 @@ if _HAS_HOMEASSISTANT:
             vol.Optional("strength"): vol.Coerce(int),
             vol.Optional("water_ml"): vol.Coerce(int),
             vol.Optional("temperature"): vol.Coerce(int),
-            vol.Optional("grinder_ratio"): vol.Any(vol.Coerce(int), str),
+            # str first: vol.Any returns the first passing validator, and
+            # vol.Coerce(int) would eat item names like "100_0" via PEP-515
+            # digit separators (int("100_0") == 1000) before catalogue check.
+            vol.Optional("grinder_ratio"): vol.Any(str, vol.Coerce(int)),
             vol.Optional("milk_s"): vol.Coerce(int),
             vol.Optional("milk_foam_s"): vol.Coerce(int),
         }

@@ -4,6 +4,15 @@ All notable changes to this integration are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] — 2026-10-04
+
+### Fixed
+
+- Options-flow translations (`retain_when_offline` toggle label) are now
+  under the top-level `"options"` key in `strings.json` /
+  `translations/en.json`. They were nested at `config.options`, which
+  hassfest rejects, breaking CI for the 1.0.0 release.
+
 ## [1.0.0] — 2026-10-02
 
 ### Changed

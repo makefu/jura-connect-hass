@@ -10,3 +10,5 @@ result-*
 dist/
 .claude
 tmp/
+.ha-token
+.omp/

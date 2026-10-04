@@ -4,6 +4,27 @@ All notable changes to this integration are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] — 2026-10-04
+
+### Changed
+
+- Brew control entities now use Home Assistant translation keys instead of
+  hard-coded English names. The EF566 product names, temperature levels and
+  the factory-default sentinel are translated in English and German
+  (*Factory default* / *Standard*); unknown product names from other machine
+  profiles stay usable as their raw profile value. The locale-neutral
+  sentinel state value changed from `"Factory Default"` to
+  `"factory_default"` — templates comparing the raw select state must use the
+  new key (the Lovelace brew card shows the human label independently).
+
+## [1.1.0] — 2026-10-04
+
+### Added
+
+- Profile-backed grinder ratio (F2) brew control:
+  `select.<slug>_brew_grinder_ratio` with the product's left/right bean-mix
+  options, keeping item names from being coerced to ints.
+
 ## [1.0.1] — 2026-10-04
 
 ### Fixed

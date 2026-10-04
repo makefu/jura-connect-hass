@@ -46,8 +46,8 @@ brew:
   name: Brew
   description: >-
     Brew a drink. Pick a product by name (optionally overriding
-    strength/water/temperature/milk/milk-foam), or pass a raw recipe payload. This
-    PHYSICALLY brews a drink on the machine.
+    strength/water/temperature/grinder-ratio/milk/milk-foam), or pass a raw
+    recipe payload. This PHYSICALLY brews a drink on the machine.
   fields:
     config_entry_id:
       name: Config Entry ID
@@ -98,6 +98,15 @@ brew:
           min: 0
           max: 3
           mode: box
+    grinder_ratio:
+      name: Grinder ratio
+      description: >-
+        Optional left:right grinder split declared by twin-grinder profiles
+        (for example 100_0, 75_25, 50_50, 25_75, or 0_100 on EF566).
+        Omit for the product's factory default.
+      example: 100_0
+      selector:
+        text:
     milk_s:
       name: Milk
       description: >-

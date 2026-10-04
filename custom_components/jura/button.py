@@ -1,8 +1,8 @@
 """Button platform: a single "Brew" button driving the brew control panel.
 
 Pressing the button PHYSICALLY brews a drink. It reads the machine-wide
-``coordinator.brew_selection`` (product + optional strength/water/temperature/milk
-staged by the brew selects), builds the bare recipe blob from the product's
+``coordinator.brew_selection`` (product plus optional recipe parameters staged
+by the brew selects), builds the bare recipe blob from the product's
 definition via the ``jura_connect`` library — a ``None`` parameter falls back
 to that product's XML default — and dispatches it through
 ``coordinator.run_brew``, which follows the ``@TV:`` progress stream until
@@ -19,6 +19,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from jura_connect import (
     KIND_COFFEE_STRENGTH,
+    KIND_GRINDER_RATIO,
     KIND_MILK_AMOUNT,
     KIND_MILK_FOAM_AMOUNT,
     KIND_TEMPERATURE,
@@ -36,6 +37,7 @@ _SELECTION_KINDS: dict[str, str] = {
     "strength": KIND_COFFEE_STRENGTH,
     "water_ml": KIND_WATER_AMOUNT,
     "temp": KIND_TEMPERATURE,
+    "grinder_ratio": KIND_GRINDER_RATIO,
     "milk_s": KIND_MILK_AMOUNT,
     "milk_foam_s": KIND_MILK_FOAM_AMOUNT,
 }

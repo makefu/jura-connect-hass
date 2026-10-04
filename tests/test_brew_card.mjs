@@ -101,6 +101,23 @@ test("machine: pin resolves drifted ids by slug token", () => {
   assert.equal(ids.status, "sensor.kaffeebert_status");
 });
 
+test("grinder ratio resolves with the same slug-drift rules", () => {
+  const Card = loadCard();
+  const card = new Card();
+  card.setConfig({ machine: "kaffeebert" });
+  const states = {
+    ...driftedStates,
+    "select.kuche_kaffeebert_brew_grinder_ratio": {
+      entity_id: "select.kuche_kaffeebert_brew_grinder_ratio",
+      state: "100_0",
+      attributes: { options: ["Factory Default", "100_0", "0_100"] },
+    },
+  };
+  const ids = card._resolveEntities({ states });
+  assert.equal(ids.grinder_ratio, "select.kuche_kaffeebert_brew_grinder_ratio");
+  assert.equal(card._formatValue({ key: "grinder_ratio" }, "75_25"), "75:25");
+});
+
 test("machine: pin never drives another machine's entities", () => {
   const Card = loadCard();
   const card = new Card();

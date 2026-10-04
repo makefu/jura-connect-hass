@@ -163,13 +163,15 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
             "strength": None,
             "water_ml": None,
             "temp": None,
+            "grinder_ratio": None,
             "milk_s": None,
             "milk_foam_s": None,
         }
         if self.brew_profile is not None and self.brew_profile.products:
             self.brew_selection["product"] = f"{self.brew_profile.products[0].code:02X}"
         # Persistent per-product brew preferences: product Code (2-hex string) ->
-        # {"strength"|"water_ml"|"temp"|"milk_s"|"milk_foam_s": int | None},
+        # {"strength"|"water_ml"|"temp"|"grinder_ratio"|"milk_s"|
+        #  "milk_foam_s": int | None},
         # where ``None`` == Factory
         # Default. Loaded from disk by ``async_load_brew_prefs`` at setup and
         # written back (debounced) by ``save_brew_prefs``.

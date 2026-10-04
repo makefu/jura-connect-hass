@@ -242,6 +242,16 @@
         "select": {
             "setting": {
                 "name": "Setting {setting}"
+            },
+            "brew_grinder_ratio": {
+                "name": "Grinder ratio",
+                "state": {
+                    "100_0": "100% left : 0% right",
+                    "75_25": "75% left : 25% right",
+                    "50_50": "50% left : 50% right",
+                    "25_75": "25% left : 75% right",
+                    "0_100": "0% left : 100% right"
+                }
             }
         },
         "number": {

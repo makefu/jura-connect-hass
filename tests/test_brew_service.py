@@ -4,9 +4,10 @@ The ``jura.brew`` service gains a friendly ``product`` path (build the recipe
 blob from the machine's product table via the ``jura_connect`` library) while
 keeping the legacy raw ``recipe`` path intact. ``jura.descale`` is the
 user-facing service name and dispatches the library's ``descale`` command; the
-legacy ``jura.decalc`` service has been removed. No machine I/O — run_command
-is mocked. Recipe payloads are computed from the library, not hardcoded: the
-byte encoding is the library's concern, so these assert the *wiring*.
+legacy ``jura.decalc`` service has been removed. No machine I/O — ``run_brew``
+and ``run_command`` are mocked. Recipe payloads are computed from the library,
+not hardcoded: the byte encoding is the library's concern, so these assert the
+*wiring*.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ jura_connect = pytest.importorskip("jura_connect")
 
 from jura_connect import (  # noqa: E402
     KIND_COFFEE_STRENGTH,
+    KIND_GRINDER_RATIO,
     KIND_MILK_FOAM_AMOUNT,
     KIND_TEMPERATURE,
     KIND_WATER_AMOUNT,
@@ -135,6 +137,24 @@ async def test_brew_by_product_with_milk_foam_override():
     }
     await _brew_handler(hass)(call)
     coordinator.run_brew.assert_awaited_once_with(_MILK_FOAM_RECIPE)
+
+
+async def test_brew_by_product_with_grinder_ratio_override():
+    """The service accepts an EF566 profile item and puts it on F2."""
+    coordinator = _mock_coordinator("EF566")
+    hass = _hass_with_coordinator(coordinator)
+    _register_services(hass)
+    call = MagicMock()
+    call.data = {
+        "config_entry_id": "test_entry_id",
+        "product": "espresso",
+        "grinder_ratio": "0_100",
+    }
+    await _brew_handler(hass)(call)
+
+    espresso = load_profile("EF566").product_by_code[0x02]
+    expected = espresso.build_recipe_hex({KIND_GRINDER_RATIO: "0_100"})
+    coordinator.run_brew.assert_awaited_once_with(expected)
 
 
 async def test_brew_by_product_code_resolves():

@@ -172,6 +172,16 @@
         "select": {
             "setting": {
                 "name": "Einstellung {setting}"
+            },
+            "brew_grinder_ratio": {
+                "name": "Mahlwerkverhältnis",
+                "state": {
+                    "100_0": "100 % links : 0 % rechts",
+                    "75_25": "75 % links : 25 % rechts",
+                    "50_50": "50 % links : 50 % rechts",
+                    "25_75": "25 % links : 75 % rechts",
+                    "0_100": "0 % links : 100 % rechts"
+                }
             }
         },
         "number": {

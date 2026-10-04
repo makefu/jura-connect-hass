@@ -18,8 +18,15 @@ from custom_components.jura.brew import (
 )
 
 
-def test_brew_params_are_the_five_recipe_axes():
-    assert BREW_PARAMS == ("strength", "water_ml", "temp", "milk_s", "milk_foam_s")
+def test_brew_params_include_grinder_ratio():
+    assert BREW_PARAMS == (
+        "strength",
+        "water_ml",
+        "temp",
+        "grinder_ratio",
+        "milk_s",
+        "milk_foam_s",
+    )
 
 
 def test_product_prefs_missing_product_is_all_factory_default():
@@ -27,6 +34,7 @@ def test_product_prefs_missing_product_is_all_factory_default():
         "strength": None,
         "water_ml": None,
         "temp": None,
+        "grinder_ratio": None,
         "milk_s": None,
         "milk_foam_s": None,
     }
@@ -38,6 +46,7 @@ def test_product_prefs_fills_missing_params_with_none():
         "strength": None,
         "water_ml": 130,
         "temp": None,
+        "grinder_ratio": None,
         "milk_s": None,
         "milk_foam_s": None,
     }
@@ -72,6 +81,7 @@ def test_selection_for_product_includes_product_code():
         "strength": 2,
         "water_ml": 130,
         "temp": 1,
+        "grinder_ratio": None,
         "milk_s": None,
         "milk_foam_s": 12,
     }

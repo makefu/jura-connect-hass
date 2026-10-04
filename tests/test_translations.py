@@ -48,7 +48,7 @@ def _expected_keys() -> dict[str, set[str]]:
     return {
         "sensor": sensor,
         "binary_sensor": binary_sensor,
-        "select": {"setting"},
+        "select": {"setting", "brew_grinder_ratio"},
         "number": {"setting"},
     }
 
@@ -109,6 +109,10 @@ def test_german_actually_translates(strings, de):
     assert _names(de, "sensor")["brew_total"] == "Bezüge gesamt"
     assert de_alerts["press_rinse"] == "Spültaste drücken"
     assert de_alerts["fill_water"] == "Wasser nachfüllen"
+    grinder = de["entity"]["select"]["brew_grinder_ratio"]
+    assert grinder["name"] == "Mahlwerkverhältnis"
+    assert grinder["state"]["100_0"] == "100 % links : 0 % rechts"
+    assert grinder["state"]["0_100"] == "0 % links : 100 % rechts"
 
 
 def test_strings_and_en_mirror_match(strings, en):

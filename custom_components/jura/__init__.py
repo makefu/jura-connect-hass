@@ -14,6 +14,7 @@ try:
     from homeassistant.helpers import entity_registry as er
     from jura_connect import (
         KIND_COFFEE_STRENGTH,
+        KIND_GRINDER_RATIO,
         KIND_MILK_AMOUNT,
         KIND_MILK_FOAM_AMOUNT,
         KIND_TEMPERATURE,
@@ -81,6 +82,7 @@ if _HAS_HOMEASSISTANT:
         "strength": KIND_COFFEE_STRENGTH,
         "water_ml": KIND_WATER_AMOUNT,
         "temperature": KIND_TEMPERATURE,
+        "grinder_ratio": KIND_GRINDER_RATIO,
         "milk_s": KIND_MILK_AMOUNT,
         "milk_foam_s": KIND_MILK_FOAM_AMOUNT,
     }
@@ -93,8 +95,8 @@ if _HAS_HOMEASSISTANT:
     )
 
     # ``brew`` accepts either a friendly ``product`` (name or Code from the
-    # machine's product table; strength/water_ml/temperature override the XML
-    # defaults) or a raw ``recipe`` (the bare hex payload, legacy path).
+    # machine's product table; optional fields override its XML defaults) or a
+    # raw ``recipe`` (the bare hex payload, legacy path).
     # Exactly one of ``product`` / ``recipe`` is required — enforced in the
     # handler.
     BREW_SCHEMA = _BASE_TARGET_SCHEMA.extend(
@@ -104,6 +106,7 @@ if _HAS_HOMEASSISTANT:
             vol.Optional("strength"): vol.Coerce(int),
             vol.Optional("water_ml"): vol.Coerce(int),
             vol.Optional("temperature"): vol.Coerce(int),
+            vol.Optional("grinder_ratio"): vol.Any(vol.Coerce(int), str),
             vol.Optional("milk_s"): vol.Coerce(int),
             vol.Optional("milk_foam_s"): vol.Coerce(int),
         }
@@ -175,7 +178,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             pass  # unknown type -> coordinator disables the brew panel
     coordinator = JuraCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
-    # Restore persisted per-product brew preferences (strength/water/temp),
+    # Restore persisted per-product brew preferences,
     # keyed by product Code, so the brew panel remembers them across restarts.
     await coordinator.async_load_brew_prefs()
 

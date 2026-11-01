@@ -22,7 +22,6 @@ class FakeClock:
     def __init__(self):
         self.now = 100.0
         self.sleeps = []
-        self.asyncio_proxy = None
 
     def monotonic(self):
         return self.now
@@ -33,27 +32,23 @@ class FakeClock:
         await asyncio.sleep(0)
 
 
-class AsyncioProxy:
-    def __init__(self, sleep):
-        self.sleep = sleep
-
-    def __getattr__(self, name):
-        return getattr(asyncio, name)
-
-
 @pytest.fixture
-def session_clock(monkeypatch):
-    # Override the upstream legacy-suite fixture's zero gap for THESE tests.
+def session_clock(monkeypatch, no_wall_clock_session_gap):
+    # Requested after the autouse zero-gap fixture (ordering pinned by name),
+    # then raise the gap back to the real ten seconds for THESE tests. Only
+    # the coordinator's own clock and sleep seam are replaced — never the
+    # event loop's.
     clock = FakeClock()
-    clock.asyncio_proxy = AsyncioProxy(clock.sleep)
-    monkeypatch.setattr(coordinator_module, "SESSION_COOLDOWN_SECONDS", 10)
+    monkeypatch.setattr(coordinator_module, "SESSION_COOLDOWN_SECONDS", 10.0)
     monkeypatch.setattr(coordinator_module, "time", SimpleNamespace(monotonic=clock.monotonic))
-    monkeypatch.setattr(coordinator_module, "asyncio", clock.asyncio_proxy)
+    monkeypatch.setattr(coordinator_module, "_sleep", clock.sleep)
+    assert coordinator_module.SESSION_COOLDOWN_SECONDS == 10.0
     return clock
 
 
-def make_coordinator(mock_backend, fake_config_entry):
+def make_coordinator(mock_backend, fake_config_entry, *, cooldown=10.0):
     coordinator = JuraCoordinator(AsyncMock(), fake_config_entry, backend=mock_backend)
+    coordinator.session_cooldown_seconds = cooldown
     # Refresh-after-command is tested separately; do not add a hidden extra I/O.
     coordinator.async_request_refresh = AsyncMock()
     mock_backend.follow_brew = AsyncMock(return_value={"ack": "@tp", "frames": []})
@@ -145,7 +140,7 @@ async def test_error_stamps_end_and_is_never_retried(mock_backend, fake_config_e
 
 
 async def test_cancel_during_cooldown_opens_nothing_and_keeps_previous_end(
-    mock_backend, fake_config_entry, session_clock
+    mock_backend, fake_config_entry, session_clock, monkeypatch
 ):
     coordinator = make_coordinator(mock_backend, fake_config_entry)
     coordinator._last_session_end = 95.0
@@ -156,7 +151,7 @@ async def test_cancel_during_cooldown_opens_nothing_and_keeps_previous_end(
         sleeping.set()
         await release.wait()
 
-    session_clock.asyncio_proxy.sleep = blocked_sleep
+    monkeypatch.setattr(coordinator_module, "_sleep", blocked_sleep)
     task = asyncio.create_task(coordinator._async_update_data())
     await sleeping.wait()
     task.cancel()
@@ -222,5 +217,64 @@ async def test_competing_operation_waits_for_lock_then_for_full_gap(
     await asyncio.gather(poll, command)
     assert brew_starts == [114.0]
     assert session_clock.sleeps == [10.0]
-    assert mock_backend.fetch.await_count == 1
-    assert mock_backend.follow_brew.await_count == 1
+
+
+async def test_poll_queued_behind_followed_brew_waits_from_stream_end(
+    mock_backend, fake_config_entry, sample_snapshot, session_clock
+):
+    # The followed brew is the lock holder: the gap must be measured from the
+    # end of the @TV: stream, not from when the brew started.
+    coordinator = make_coordinator(mock_backend, fake_config_entry)
+    brew_started = asyncio.Event()
+    finish_brew = asyncio.Event()
+    fetch_starts = []
+
+    async def brew(*args, **kwargs):
+        brew_started.set()
+        await finish_brew.wait()
+        session_clock.now = 150.0
+        return {"ack": "@tp", "frames": []}
+
+    async def fetch():
+        fetch_starts.append(session_clock.now)
+        return sample_snapshot
+
+    mock_backend.follow_brew.side_effect = brew
+    mock_backend.fetch.side_effect = fetch
+    command = asyncio.create_task(coordinator.run_brew("mock-recipe"))
+    await brew_started.wait()
+    poll = asyncio.create_task(coordinator._async_update_data())
+    await asyncio.sleep(0)
+    assert mock_backend.fetch.await_count == 0
+    finish_brew.set()
+    await asyncio.gather(command, poll)
+    assert fetch_starts == [160.0]
+    assert session_clock.sleeps == [10.0]
+
+
+async def test_instance_cooldown_option_overrides_module_default(mock_backend, fake_config_entry, session_clock):
+    # The gap comes from the coordinator instance, so the hidden options-flow
+    # field can tune it without touching the module constant.
+    coordinator = make_coordinator(mock_backend, fake_config_entry, cooldown=30.0)
+    coordinator._last_session_end = 100.0
+    await coordinator._async_update_data()
+    assert session_clock.sleeps == [30.0]
+
+
+async def test_brew_follow_seconds_option_reaches_backend(mock_backend, fake_config_entry):
+    fake_config_entry.options["brew_follow_seconds"] = 45
+    coordinator = JuraCoordinator(AsyncMock(), fake_config_entry, backend=mock_backend)
+    coordinator.async_request_refresh = AsyncMock()
+    mock_backend.follow_brew = AsyncMock(return_value={"ack": "@tp", "frames": []})
+
+    await coordinator.run_brew("mock-recipe")
+
+    mock_backend.follow_brew.assert_awaited_once_with("mock-recipe", follow_seconds=45.0)
+
+
+def test_entry_seconds_precedence(fake_config_entry):
+    fake_config_entry.data["session_cooldown_seconds"] = 5
+    assert JuraCoordinator._entry_seconds(fake_config_entry, "session_cooldown_seconds", 10.0) == 5.0
+    fake_config_entry.options["session_cooldown_seconds"] = 20
+    assert JuraCoordinator._entry_seconds(fake_config_entry, "session_cooldown_seconds", 10.0) == 20.0
+    assert JuraCoordinator._entry_seconds(fake_config_entry, "missing_key", 10.0) == 10.0

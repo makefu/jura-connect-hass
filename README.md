@@ -92,12 +92,15 @@ acknowledgements alone do not renew poll health. The timestamp is a string,
 so compare it in templates via `as_timestamp`, e.g.
 `now() | as_timestamp - state_attr('sensor.<slug>_status', 'last_successful_update') | as_timestamp`.
 
-All coordinator I/O paths share a lock and leave at least ten seconds after
-the preceding operation ends before opening another session. The first
-operation is not delayed, elapsed quiet time is reused, and errors do not
-trigger a command retry. This applies to one coordinator, not another client
-such as J.O.E. or another process. Cancelling a caller does not guarantee that
-a synchronous worker or a drink already dispatched to the machine has stopped.
+All coordinator I/O paths share a lock and leave a quiet period (default
+ten seconds, configurable under Advanced settings as *Quiet period between
+sessions*) after the preceding operation ends before opening another
+session. The first operation is not delayed, elapsed quiet time is reused,
+and errors do not trigger a command retry. The brew progress follow window
+is likewise configurable (*Follow brew progress up to*, default 120 s).
+This applies to one coordinator, not another client such as J.O.E. or
+another process. Cancelling a caller does not guarantee that a synchronous
+worker or a drink already dispatched to the machine has stopped.
 
 ### Languages
 

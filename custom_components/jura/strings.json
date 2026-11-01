@@ -64,7 +64,9 @@
                 "title": "Advanced settings",
                 "description": "Behaviour options for this machine.",
                 "data": {
-                    "retain_when_offline": "Retain last values when offline"
+                    "retain_when_offline": "Retain last values when offline",
+                    "session_cooldown_seconds": "Quiet period between sessions (seconds)",
+                    "brew_follow_seconds": "Follow brew progress up to (seconds)"
                 }
             }
         }

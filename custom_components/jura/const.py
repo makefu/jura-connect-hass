@@ -32,6 +32,16 @@ SELECTION_MANUAL = "manual"
 CONF_RETAIN_WHEN_OFFLINE = "retain_when_offline"
 DEFAULT_RETAIN_WHEN_OFFLINE = True
 
+# Config-entry options for the two long coordinator sleeps. Both are also
+# accepted in entry.data (YAML-era overrides); entry.options wins.
+# Quiet period the coordinator leaves after each dongle TCP session before
+# opening the next one; Wi-Fi Connect can reset an immediately reopened
+# session. 0 disables the gap.
+CONF_SESSION_COOLDOWN_SECONDS = "session_cooldown_seconds"
+# Upper bound for following the @TV: progress stream of a dispatched brew;
+# the session stays open for the whole dispense up to this many seconds.
+CONF_BREW_FOLLOW_SECONDS = "brew_follow_seconds"
+
 # Active alert -> human-readable state when picking a single overall machine state.
 # Earlier entries win when multiple alerts are active. The order roughly
 # follows: critical errors first, then in-process states, then info / ready

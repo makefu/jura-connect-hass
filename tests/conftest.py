@@ -194,7 +194,23 @@ class SelectSelectorMode(str, Enum):
     LIST = "list"
 
 
-_make_module("homeassistant.helpers.selector", BooleanSelector=BooleanSelector, SelectSelector=SelectSelector)
+class NumberSelectorConfig(dict):
+    def __init__(self, config=None, **kwargs):
+        super().__init__(config or kwargs)
+
+
+class NumberSelector(dict):
+    def __init__(self, config=None):
+        super().__init__(config if isinstance(config, dict) else {"config": config})
+
+
+_make_module(
+    "homeassistant.helpers.selector",
+    BooleanSelector=BooleanSelector,
+    SelectSelector=SelectSelector,
+    NumberSelector=NumberSelector,
+    NumberSelectorConfig=NumberSelectorConfig,
+)
 
 
 # --- homeassistant.exceptions ---

@@ -28,18 +28,20 @@ from homeassistant.config_entries import (
     OptionsFlowWithConfigEntry,
 )
 from homeassistant.core import callback
-from homeassistant.helpers.selector import BooleanSelector
+from homeassistant.helpers.selector import BooleanSelector, NumberSelector, NumberSelectorConfig
 
 from .backends.base import DiscoveredMachine, JuraAuthError, JuraBackendError
 from .backends.jura import JuraConnectBackend, discover_machines, machine_type_from_article
 from .const import (
     CONF_AUTH_HASH,
+    CONF_BREW_FOLLOW_SECONDS,
     CONF_CONN_ID,
     CONF_HOST,
     CONF_MACHINE_TYPE,
     CONF_PIN,
     CONF_PORT,
     CONF_RETAIN_WHEN_OFFLINE,
+    CONF_SESSION_COOLDOWN_SECONDS,
     DEFAULT_PORT,
     DEFAULT_RETAIN_WHEN_OFFLINE,
     DOMAIN,
@@ -338,6 +340,32 @@ class JuraOptionsFlow(OptionsFlowWithConfigEntry):
                         "selector": BooleanSelector(),
                     },
                 ): bool,
+                vol.Optional(
+                    CONF_SESSION_COOLDOWN_SECONDS,
+                    default=self._current_seconds(CONF_SESSION_COOLDOWN_SECONDS, 10.0),
+                    description={
+                        "advanced": True,
+                        "selector": NumberSelector(
+                            NumberSelectorConfig(min=0, max=120, step=1, unit_of_measurement="s")
+                        ),
+                    },
+                ): float,
+                vol.Optional(
+                    CONF_BREW_FOLLOW_SECONDS,
+                    default=self._current_seconds(CONF_BREW_FOLLOW_SECONDS, 120.0),
+                    description={
+                        "advanced": True,
+                        "selector": NumberSelector(
+                            NumberSelectorConfig(min=10, max=600, step=5, unit_of_measurement="s")
+                        ),
+                    },
+                ): float,
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)
+
+    def _current_seconds(self, key: str, default: float) -> float:
+        options = self.config_entry.options or {}
+        if key in options:
+            return float(options[key])
+        return float(self.config_entry.data.get(key, default))

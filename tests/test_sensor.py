@@ -50,7 +50,11 @@ def test_state_sensor_idle_when_no_alerts(empty_snapshot, fake_config_entry):
 def test_state_sensor_none_without_data(fake_config_entry):
     sensor = StateSensor(_make_coordinator(None), fake_config_entry)
     assert sensor.native_value is None
-    assert sensor.extra_state_attributes == {}
+    # Poll-health keys stay present even without a snapshot; the MagicMock
+    # coordinator's own attributes ride through unchanged.
+    attrs = sensor.extra_state_attributes
+    assert set(attrs) == {"last_successful_update", "last_poll_success"}
+    assert attrs["last_poll_success"] is sensor.coordinator.last_poll_success
 
 
 def test_state_sensor_attributes_include_snapshot(sample_snapshot, fake_config_entry):

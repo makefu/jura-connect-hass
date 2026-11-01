@@ -4,6 +4,19 @@ All notable changes to this integration are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] — 2026-11-01
+
+### Added
+
+- The status sensor now exposes poll health via two always-present
+  attributes: `last_successful_update` (UTC ISO timestamp, `null` before
+  the first successful read) and `last_poll_success` (boolean). Retained
+  last-known values used to be indistinguishable from a fresh read during
+  a tolerated offline poll; now only a successful backend fetch renews the
+  timestamp, so automations can gate on real freshness. Command or brew
+  acknowledgements alone do not renew poll health. The timestamp is a
+  string — compare it in templates via `as_timestamp`.
+
 ## [1.1.1] — 2026-10-04
 
 ### Changed

@@ -84,10 +84,13 @@ for reachability.
 
 The status sensor exposes `last_successful_update` (UTC ISO timestamp, or
 `null` before the first successful read) and `last_poll_success` (boolean).
-Only a successful backend poll renews the timestamp. A failed poll sets the
+Both keys are always present, even before the first snapshot. Only a
+successful backend poll renews the timestamp. A failed poll sets the
 success flag to false even when its last-known values are retained, so a
 tolerated offline error cannot look like a fresh read. Command or brew
-acknowledgements alone do not renew poll health.
+acknowledgements alone do not renew poll health. The timestamp is a string,
+so compare it in templates via `as_timestamp`, e.g.
+`now() | as_timestamp - state_attr('sensor.<slug>_status', 'last_successful_update') | as_timestamp`.
 
 ### Languages
 

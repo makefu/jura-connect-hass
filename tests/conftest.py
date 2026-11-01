@@ -665,3 +665,11 @@ def discovered_machines() -> list[DiscoveredMachine]:
         ),
         DiscoveredMachine(address="192.0.2.11", name="192.0.2.11", via="tcp"),
     ]
+
+
+@pytest.fixture(autouse=True)
+def no_wall_clock_session_gap(monkeypatch):
+    """Keep mocked legacy operations fast; session tests install their own clock."""
+    from custom_components.jura import coordinator as coordinator_module
+
+    monkeypatch.setattr(coordinator_module, "SESSION_COOLDOWN_SECONDS", 0)

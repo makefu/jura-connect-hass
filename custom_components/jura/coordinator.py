@@ -6,6 +6,9 @@ import asyncio
 import dataclasses
 import errno
 import logging
+import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -56,6 +59,10 @@ OFFLINE_TOLERANCE = 2
 # polls during that window hit a busy dongle and fail — that is our own
 # session, not an outage. See _handle_offline_poll.
 FOLLOW_BREW_SECONDS = 120.0
+
+# Wi-Fi Connect may reject a new TCP session immediately after one closes.
+# Apply the quiet period to every coordinator I/O path, including failures.
+SESSION_COOLDOWN_SECONDS = 10.0
 
 # errno values that mean "the machine isn't answering" — connection
 # refused, host/network unreachable, timeouts. Anything else (EACCES,
@@ -179,10 +186,11 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
         self._brew_prefs_store: Store | None = None
         # Serialise all machine I/O (polls + commands + setting writes) so the
         # coordinator never opens a second TCP session while one is in flight —
-        # the dongle only serves one at a time. Held only for the duration of a
-        # single backend call (a brew @TP: returns as soon as the machine
-        # accepts it; the physical dispense continues after the session closes).
+        # the dongle only serves one at a time. The lock also covers the quiet
+        # period before the next backend call. Followed brews hold their session
+        # until the progress stream ends or times out.
         self._session_lock = asyncio.Lock()
+        self._last_session_end: float | None = None
         # Consecutive offline-classified poll failures; see OFFLINE_TOLERANCE.
         self._consecutive_offline = 0
         # True while a followed brew holds the session; suppresses offline
@@ -310,9 +318,27 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
             machine_type=data.get(CONF_MACHINE_TYPE),
         )
 
+    @asynccontextmanager
+    async def _machine_session(self) -> AsyncIterator[None]:
+        """Serialize I/O and leave the dongle quiet after the previous session.
+
+        Cancellation during the cooldown opens no connection and does not move
+        the previous end time. Once I/O starts, errors and cancellation still
+        require a quiet period before the next attempt. No command is retried.
+        """
+        async with self._session_lock:
+            if self._last_session_end is not None:
+                remaining = SESSION_COOLDOWN_SECONDS - (time.monotonic() - self._last_session_end)
+                if remaining > 0:
+                    await asyncio.sleep(remaining)
+            try:
+                yield
+            finally:
+                self._last_session_end = time.monotonic()
+
     async def _async_update_data(self) -> MachineSnapshot:
         try:
-            async with self._session_lock:
+            async with self._machine_session():
                 snapshot = await self.backend.fetch()
         except JuraAuthError as err:
             self.last_poll_success = False
@@ -372,7 +398,7 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
     ) -> dict[str, Any]:
         """Dispatch a named command, then refresh state so HA reflects the change."""
         try:
-            async with self._session_lock:
+            async with self._machine_session():
                 result = await self.backend.run_named(
                     name,
                     args,
@@ -393,7 +419,7 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
         ``follow_seconds``) because the ``@TV:`` stream needs the session
         open. Polls colliding with it are not treated as an outage.
         """
-        async with self._session_lock:
+        async with self._machine_session():
             self._follow_brew_active = True
             try:
                 result = await self.backend.follow_brew(recipe, follow_seconds=follow_seconds)
@@ -417,7 +443,7 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
         shot.
         """
         try:
-            async with self._session_lock:
+            async with self._machine_session():
                 new_hex = await self.backend.write_setting(name, value)
         except JuraAuthError as err:
             raise ConfigEntryAuthFailed(f"authentication failed: {err}") from err

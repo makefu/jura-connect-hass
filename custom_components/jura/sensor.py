@@ -99,7 +99,11 @@ class StateSensor(JuraEntity, SensorEntity):
         snapshot = _snapshot(self.coordinator)
         if snapshot is None:
             return {}
-        return serialize_snapshot(snapshot)
+        return {
+            **serialize_snapshot(snapshot),
+            "last_successful_update": self.coordinator.last_successful_update,
+            "last_poll_success": self.coordinator.last_poll_success,
+        }
 
 
 class BrewProgressSensor(JuraEntity, SensorEntity):

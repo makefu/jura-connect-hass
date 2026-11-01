@@ -82,6 +82,13 @@ dongles sleep regularly and v0.1 caused dashboards to flash with every
 failed poll. The connectivity binary sensor is the single source of truth
 for reachability.
 
+The status sensor exposes `last_successful_update` (UTC ISO timestamp, or
+`null` before the first successful read) and `last_poll_success` (boolean).
+Only a successful backend poll renews the timestamp. A failed poll sets the
+success flag to false even when its last-known values are retained, so a
+tolerated offline error cannot look like a fresh read. Command or brew
+acknowledgements alone do not renew poll health.
+
 ### Languages
 
 Entity names use Home Assistant's native per-user translations, so each

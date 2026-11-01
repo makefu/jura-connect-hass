@@ -6,7 +6,7 @@ import asyncio
 import dataclasses
 import errno
 import logging
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -188,6 +188,10 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
         # True while a followed brew holds the session; suppresses offline
         # classification for polls that collide with it.
         self._follow_brew_active = False
+        # Poll health is separate from the retained last-known snapshot: a
+        # tolerated offline poll must not look like a fresh successful read.
+        self.last_successful_update: str | None = None
+        self.last_poll_success = False
 
     @staticmethod
     def _load_brew_profile(config_entry: ConfigEntry) -> MachineProfile | None:
@@ -311,13 +315,18 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
             async with self._session_lock:
                 snapshot = await self.backend.fetch()
         except JuraAuthError as err:
+            self.last_poll_success = False
             raise ConfigEntryAuthFailed(f"authentication failed: {err}") from err
         except JuraBackendError as err:
+            self.last_poll_success = False
             if _is_offline_error(err):
                 return self._handle_offline_poll(err)
             raise UpdateFailed(f"backend error: {err}") from err
         except Exception as err:  # noqa: BLE001
+            self.last_poll_success = False
             raise UpdateFailed(f"unexpected error: {err}") from err
+        self.last_successful_update = datetime.now(UTC).isoformat()
+        self.last_poll_success = True
         self._consecutive_offline = 0
         return snapshot
 

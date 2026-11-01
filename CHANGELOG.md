@@ -4,6 +4,29 @@ All notable changes to this integration are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] — 2026-11-01
+
+### Added
+
+- Per-machine tunables under **Configure → Advanced settings**: *Quiet
+  period between sessions (seconds)* (default 10, `0` disables) gates the
+  minimum gap between dongle TCP sessions, and *Follow brew progress up
+  to (seconds)* (default 120) caps how long a running brew's progress
+  stream holds the session. Both were hard-coded before; values persist on
+  the config entry (options, YAML-era data fallback) and applying them
+  reloads the integration.
+
+### Fixed
+
+- Pressing **Configure** returned a 500: the options form embedded
+  `BooleanSelector`/`NumberSelector` *instances* in the voluptuous
+  `description`, which Home Assistant copies verbatim into the JSON
+  field list it sends over the websocket API
+  (`Unable to serialize to JSON. Bad data found at
+  $.data_schema[0].description.selector=...`). Descriptions now carry the
+  JSON-native selector config dicts. Broken since 1.0.0 (the
+  `retain_when_offline` toggle alone triggered it).
+
 ## [1.2.0] — 2026-11-01
 
 ### Added

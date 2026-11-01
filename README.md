@@ -80,7 +80,9 @@ declaration; Nix users get it pinned via the flake input.
 Entities keep showing their last value when the machine is offline — JURA
 dongles sleep regularly and v0.1 caused dashboards to flash with every
 failed poll. The connectivity binary sensor is the single source of truth
-for reachability.
+for reachability. Turn this off per machine under Advanced settings
+(*Retain last values when offline*, default on); with it off, entities go
+`unavailable` on the second consecutive failed poll.
 
 The status sensor exposes `last_successful_update` (UTC ISO timestamp, or
 `null` before the first successful read) and `last_poll_success` (boolean).
@@ -93,14 +95,16 @@ so compare it in templates via `as_timestamp`, e.g.
 `now() | as_timestamp - state_attr('sensor.<slug>_status', 'last_successful_update') | as_timestamp`.
 
 All coordinator I/O paths share a lock and leave a quiet period (default
-ten seconds, configurable under Advanced settings as *Quiet period between
-sessions*) after the preceding operation ends before opening another
-session. The first operation is not delayed, elapsed quiet time is reused,
-and errors do not trigger a command retry. The brew progress follow window
-is likewise configurable (*Follow brew progress up to*, default 120 s).
-This applies to one coordinator, not another client such as J.O.E. or
-another process. Cancelling a caller does not guarantee that a synchronous
-worker or a drink already dispatched to the machine has stopped.
+ten seconds; 0 disables it) after the preceding operation ends before
+opening another session — tunable under Advanced settings as *Quiet period
+between sessions (seconds)*. The first operation is not delayed, elapsed
+quiet time is reused, and errors do not trigger a command retry. While a
+brew runs the integration follows its progress stream for up to two
+minutes by default (*Follow brew progress up to (seconds)*; the window is
+a cap — it ends as soon as the stream closes). This applies to one
+coordinator, not another client such as J.O.E. or another process.
+Cancelling a caller does not guarantee that a synchronous worker or a
+drink already dispatched to the machine has stopped.
 
 ### Languages
 
@@ -164,7 +168,7 @@ machine: kaffeebert   # optional — see below
 | `jura.power_off`       | Put the machine into standby (TT237W ignores this)    |
 | `jura.restart`         | Reboot the WiFi dongle                                |
 | `jura.cancel`          | Cancel the current process/brew                       |
-| `jura.skip_quality_step` | Skip the current quality-assistant step (`scope`: one/all) |
+| `jura.skip_quality_step` | Skip the current quality-assistant step (`scope`: one/all). Irreversible; has been seen to zero maintenance counters |
 | `jura.milk_cooler_status` | Read the milk-cooler temperature (response)        |
 | `jura.restart_dongle`  | Reboot the WiFi dongle (library-gated variant)        |
 | `jura.special_counters` | Read special-function counters (response)            |
@@ -209,6 +213,19 @@ Copy `custom_components/jura/` into your Home Assistant
    example `S8 (EB) [EF1091]` — or pick *Use baseline (no profile)* for
    a generic EF536 fallback. Models without a profile won't get
    per-recipe brew counters or machine-setting entities.
+
+### Advanced settings
+
+Settings → Devices & Services → Jura Connect → **⋮ → Configure** opens a
+form with all fields collapsed behind *Advanced settings*. Values are
+stored on the config entry; saving reloads the integration and applies
+them immediately.
+
+| Option | Default | Range | Effect |
+| --- | --- | --- | --- |
+| *Retain last values when offline* | on | — | Keep entities at their last-known values through failed polls; off makes them `unavailable` on the second consecutive failure. |
+| *Quiet period between sessions (seconds)* | 10 | 0–120 | Minimum gap between TCP/51515 sessions (polls, commands, brews). The dongle accepts one connection at a time; the gap keeps a reconnect from colliding with the previous session. `0` disables it. |
+| *Follow brew progress up to (seconds)* | 120 | 10–600 | Cap on how long the integration holds the session following a running brew's progress stream. The follow ends as soon as the stream closes, so this bounds the worst case only. |
 
 ## Example automations
 

@@ -28,7 +28,6 @@ from homeassistant.config_entries import (
     OptionsFlowWithConfigEntry,
 )
 from homeassistant.core import callback
-from homeassistant.helpers.selector import BooleanSelector, NumberSelector, NumberSelectorConfig
 
 from .backends.base import DiscoveredMachine, JuraAuthError, JuraBackendError
 from .backends.jura import JuraConnectBackend, discover_machines, machine_type_from_article
@@ -337,7 +336,7 @@ class JuraOptionsFlow(OptionsFlowWithConfigEntry):
                     default=current,
                     description={
                         "advanced": True,
-                        "selector": BooleanSelector(),
+                        "selector": {"boolean": {}},
                     },
                 ): bool,
                 vol.Optional(
@@ -345,9 +344,14 @@ class JuraOptionsFlow(OptionsFlowWithConfigEntry):
                     default=self._current_seconds(CONF_SESSION_COOLDOWN_SECONDS, 10.0),
                     description={
                         "advanced": True,
-                        "selector": NumberSelector(
-                            NumberSelectorConfig(min=0, max=120, step=1, unit_of_measurement="s")
-                        ),
+                        "selector": {
+                            "number": {
+                                "min": 0,
+                                "max": 120,
+                                "step": 1,
+                                "unit_of_measurement": "s",
+                            }
+                        },
                     },
                 ): float,
                 vol.Optional(
@@ -355,9 +359,14 @@ class JuraOptionsFlow(OptionsFlowWithConfigEntry):
                     default=self._current_seconds(CONF_BREW_FOLLOW_SECONDS, 120.0),
                     description={
                         "advanced": True,
-                        "selector": NumberSelector(
-                            NumberSelectorConfig(min=10, max=600, step=5, unit_of_measurement="s")
-                        ),
+                        "selector": {
+                            "number": {
+                                "min": 10,
+                                "max": 600,
+                                "step": 5,
+                                "unit_of_measurement": "s",
+                            }
+                        },
                     },
                 ): float,
             }

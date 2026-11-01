@@ -380,6 +380,42 @@ async def test_options_flow_defaults_from_data_override(fake_config_entry):
     assert default is False
 
 
+def test_options_flow_schema_is_json_serializable(fake_config_entry):
+    """HA serializes flow schemas to JSON for the websocket API.
+
+    Selector *instances* in `description` are not JSON-serializable (the
+    options form used to 500 with `Unable to serialize to JSON. Bad data
+    found at $.data_schema[0].description.selector=<BooleanSelector ...>`),
+    so descriptions must carry plain JSON-native selector config dicts.
+    """
+    import asyncio
+    import json
+
+    from custom_components.jura.config_flow import JuraOptionsFlow
+    from custom_components.jura.const import (
+        CONF_BREW_FOLLOW_SECONDS,
+        CONF_RETAIN_WHEN_OFFLINE,
+        CONF_SESSION_COOLDOWN_SECONDS,
+    )
+
+    flow = JuraOptionsFlow(fake_config_entry)
+    result = asyncio.run(flow.async_step_init())
+    schema = result["data_schema"]
+    expected = {
+        CONF_RETAIN_WHEN_OFFLINE: {"boolean": {}},
+        CONF_SESSION_COOLDOWN_SECONDS: {"number": {"min": 0, "max": 120, "step": 1, "unit_of_measurement": "s"}},
+        CONF_BREW_FOLLOW_SECONDS: {"number": {"min": 10, "max": 600, "step": 5, "unit_of_measurement": "s"}},
+    }
+    for key, selector in expected.items():
+        field = next(v for v in schema.schema if v == key)
+        description = field.description
+        assert description["advanced"] is True
+        # Plain dict, not a Selector instance: `type` guard catches the regression.
+        assert type(description["selector"]) is dict
+        assert description["selector"] == selector
+        json.dumps(description)
+
+
 def test_config_flow_registers_options_flow(fake_config_entry):
     from custom_components.jura.config_flow import JuraOptionsFlow
 

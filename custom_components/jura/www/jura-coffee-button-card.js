@@ -56,6 +56,10 @@
       no_product: "Product not available",
       choose_product: "Choose a drink in the card editor",
       unreachable: "Machine not reachable",
+      not_ready: "Not ready",
+      not_ready_hint: "Machine not ready yet",
+      brew_in_progress: "Already brewing",
+      brew_not_started: "Did not start brewing, still heating up?",
       setup_retry: "Machine not reachable, retrying…",
       not_loaded: "Integration not loaded",
       default_recipe: "Factory recipe",
@@ -87,6 +91,10 @@
       no_product: "Getränk nicht verfügbar",
       choose_product: "Getränk im Karteneditor wählen",
       unreachable: "Maschine nicht erreichbar",
+      not_ready: "Nicht bereit",
+      not_ready_hint: "Maschine noch nicht bereit",
+      brew_in_progress: "Es wird bereits gebrüht",
+      brew_not_started: "Brühen nicht gestartet, heizt sie noch auf?",
       setup_retry: "Maschine nicht erreichbar, neuer Versuch läuft…",
       not_loaded: "Integration nicht geladen",
       default_recipe: "Standardrezept",
@@ -468,6 +476,8 @@
     async _onPress() {
       const { machine, product } = this._context();
       if (!machine || !product || this._phase === "brewing" || this._isOffline(machine)) return;
+      const brewButton = machine.entities.brew_button && this._hass.states[machine.entities.brew_button];
+      if (brewButton && brewButton.state === "unavailable") return;
       if (this._config.confirm && this._phase !== "confirm") {
         this._setPhase("confirm", 3000);
         return;
@@ -482,9 +492,13 @@
         // The integration raises translation_key "machine_unreachable" and
         // marks the machine offline at once; show it in the user's language.
         const key = err && (err.translation_key || (err.error && err.error.translation_key));
-        this._error = key === "machine_unreachable"
-          ? strings(this._hass).unreachable
-          : (err && err.message) || `${err}`;
+        const own = {
+          machine_unreachable: "unreachable",
+          machine_not_ready: "not_ready_hint",
+          brew_in_progress: "brew_in_progress",
+          brew_not_started: "brew_not_started",
+        }[key];
+        this._error = own ? strings(this._hass)[own] : (err && err.message) || `${err}`;
         this._setPhase("error", 4000);
       }
     }
@@ -537,8 +551,13 @@
       const status = machine.entities.status && hass.states[machine.entities.status];
       const mood = offline ? "offline" : statusMood(status && status.state);
       els.dot.className = `dot ${mood}`;
+      // The integration's Brew button is the source of truth for "can brew
+      // now": unavailable while heating up, rinsing, waiting for water, or
+      // while a brew (from anywhere) is running.
+      const brewButton = machine.entities.brew_button && hass.states[machine.entities.brew_button];
+      const notReady = !offline && !!brewButton && brewButton.state === "unavailable";
 
-      if (mood === "attention" && phase === "idle") {
+      if ((mood === "attention" || (notReady && status)) && phase === "idle") {
         els.sub.textContent = hass.formatEntityState ? hass.formatEntityState(status) : prettify(status.state);
         els.sub.classList.add("attention");
       } else if (phase === "error" && this._error) {
@@ -555,6 +574,9 @@
       if (offline && phase !== "brewing") {
         label = t.offline;
         els.btnIcon.setAttribute("icon", "mdi:cloud-off-outline");
+      } else if (notReady && phase !== "brewing" && phase !== "error") {
+        label = t.not_ready;
+        els.btnIcon.setAttribute("icon", "mdi:progress-clock");
       } else if (phase === "confirm") {
         label = t.confirm;
         els.btnIcon.setAttribute("icon", "mdi:gesture-tap");
@@ -576,7 +598,7 @@
         els.button.title = this._error || "";
       }
       els.label.textContent = label;
-      els.button.disabled = (offline && phase !== "brewing") || phase === "brewing";
+      els.button.disabled = offline || notReady || phase === "brewing";
     }
   }
 

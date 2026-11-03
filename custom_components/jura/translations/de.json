@@ -264,6 +264,15 @@
         },
         "brew_failed": {
             "message": "Brühen fehlgeschlagen: {error}"
+        },
+        "machine_not_ready": {
+            "message": "Die Kaffeemaschine ist noch nicht bereit ({state}). Bitte gleich noch einmal versuchen."
+        },
+        "brew_in_progress": {
+            "message": "Es wird bereits ein Getränk zubereitet."
+        },
+        "brew_not_started": {
+            "message": "Die Kaffeemaschine hat nicht mit dem Brühen begonnen. Heizt sie noch auf oder zeigt sie eine Meldung an?"
         }
     }
 }

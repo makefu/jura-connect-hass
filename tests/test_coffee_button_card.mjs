@@ -381,3 +381,71 @@ test("brew on a machine that just went away shows a translated hint", async () =
   assert.equal(root.querySelector(".label").textContent, "Fehler");
   assert.equal(root.querySelector(".sub").textContent, "Maschine nicht erreichbar");
 });
+
+// --- Not ready (heating up) -----------------------------------------------
+// Regression: after power-on the tile offered "Brühen" while the machine was
+// heating up; the press brewed nothing and blocked the integration.
+
+const WITH_BUTTON = {
+  ...MACHINE,
+  entities: { ...MACHINE.entities, brew_button: "button.kaffeebert_brew" },
+};
+
+test("heating up: tile says not ready, shows why, never brews", async () => {
+  const h = hass(
+    {
+      "sensor.kaffeebert_status": { state: "heating_up", attributes: {} },
+      "button.kaffeebert_brew": { state: "unavailable", attributes: {} },
+    },
+    { machines: [WITH_BUTTON] },
+  );
+  h.formatEntityState = (st) => ({ heating_up: "Heizt auf" })[st.state] || st.state;
+  const { card, root } = await rendered({ product: "espresso" }, h);
+  assert.equal(root.querySelector(".label").textContent, "Nicht bereit");
+  assert.equal(root.querySelector(".sub").textContent, "Heizt auf");
+  assert.match(root.querySelector(".dot").className, /busy/);
+  assert.equal(root.querySelector("button").disabled, true);
+  await card._onPress();
+  assert.equal(h.calls.length, 0);
+});
+
+test("ready again: the integration's brew button decides, tile brews", async () => {
+  const h = hass(
+    { "button.kaffeebert_brew": { state: "2026-11-03T08:00:00+00:00", attributes: {} } },
+    { machines: [WITH_BUTTON] },
+  );
+  const { card, root } = await rendered({ product: "espresso" }, h);
+  assert.equal(root.querySelector(".label").textContent, "Brühen");
+  assert.equal(root.querySelector("button").disabled, false);
+  await card._onPress();
+  assert.equal(h.calls.length, 1);
+});
+
+test("a brew running elsewhere (e.g. before a dashboard reload) blocks the tile", async () => {
+  const h = hass(
+    { "button.kaffeebert_brew": { state: "unavailable", attributes: {} } },
+    { machines: [WITH_BUTTON] },
+  );
+  const { card, root } = await rendered({ product: "espresso" }, h);
+  assert.equal(root.querySelector("button").disabled, true);
+  await card._onPress();
+  assert.equal(h.calls.length, 0);
+});
+
+for (const [key, text] of [
+  ["machine_not_ready", "Maschine noch nicht bereit"],
+  ["brew_in_progress", "Es wird bereits gebrüht"],
+  ["brew_not_started", "Brühen nicht gestartet, heizt sie noch auf?"],
+]) {
+  test(`integration error ${key} is shown in the user's language`, async () => {
+    const h = hass();
+    h.callService = async () => {
+      const err = new Error("english text from HA");
+      err.translation_key = key;
+      throw err;
+    };
+    const { card, root } = await rendered({ product: "espresso" }, h);
+    await card._onPress();
+    assert.equal(root.querySelector(".sub").textContent, text);
+  });
+}

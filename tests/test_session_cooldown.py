@@ -271,7 +271,7 @@ async def test_brew_follow_seconds_option_reaches_backend(mock_backend, fake_con
 
     await coordinator.run_brew("mock-recipe")
 
-    mock_backend.follow_brew.assert_awaited_once_with("mock-recipe", follow_seconds=45.0)
+    mock_backend.follow_brew.assert_awaited_once_with("mock-recipe", follow_seconds=45.0, start_timeout=30.0)
 
 
 def test_entry_seconds_precedence(fake_config_entry):

@@ -85,7 +85,19 @@ for reachability. Turn this off per machine under Advanced settings
 `unavailable` on the second consecutive failed poll.
 
 Actions are the exception: the **Brew button** is unavailable whenever the
-machine is offline, retained values or not. A brew (button, card or
+machine is offline, retained values or not, and while it cannot brew:
+heating up, rinsing, filling, *please wait*, or waiting for you (water,
+grounds, tray, covers, errors). Maintenance reminders such as *descale*
+and hints such as *no beans* do not block. While the machine is heating
+up the integration polls every 15 s instead of 60 s, so the button comes
+back soon after it is ready. A second brew while one is running is
+refused (*A drink is already being brewed.*), never queued.
+
+If the machine accepts a recipe but shows no brew progress within 30 s
+(*The coffee machine did not start brewing…*), the integration stops
+waiting at once instead of holding the machine's only connection for the
+whole follow window; a brew session that is still stuck after its time
+budget is closed. A brew (button, card or
 `jura.brew`) that finds the machine unreachable fails with a clear,
 translated message (*The coffee machine is not reachable…*) and marks the
 machine offline immediately, without waiting for the next polls. Other
@@ -183,6 +195,10 @@ confirm: false           # true = tap twice to brew
 - **Brewing feedback**: the button shows *Brewing…* with the progress
   percentage while the integration follows the brew, then *Enjoy!*; errors
   appear on the tile.
+- **Not ready**: while the machine heats up, rinses or waits for water,
+  the button reads *Not ready* and the subtitle shows the reason (e.g.
+  *Heating up*). The tile follows the integration's Brew button, so it is
+  also blocked while a brew started elsewhere is running.
 - **Offline**: the button is disabled while the connectivity sensor is not
   on, and the tile says why (*Machine not reachable*, also while Home
   Assistant retries the setup). Pressing Brew on a machine that has just

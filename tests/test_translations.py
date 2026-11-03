@@ -155,6 +155,14 @@ def test_strings_and_en_mirror_match(strings, en):
 def test_exception_messages_translated(name):
     """Brew errors raised with translation_key must resolve in every language."""
     exceptions = _load(name)["exceptions"]
-    assert set(exceptions) == {"machine_unreachable", "brew_failed"}
+    assert set(exceptions) == {
+        "machine_unreachable",
+        "machine_not_ready",
+        "brew_in_progress",
+        "brew_not_started",
+        "brew_failed",
+    }
     assert "{error}" in exceptions["brew_failed"]["message"]
-    assert "{" not in exceptions["machine_unreachable"]["message"]
+    assert "{state}" in exceptions["machine_not_ready"]["message"]
+    for key in ("machine_unreachable", "brew_in_progress", "brew_not_started"):
+        assert "{" not in exceptions[key]["message"]

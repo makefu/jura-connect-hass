@@ -81,6 +81,14 @@ class JuraAuthError(JuraBackendError):
     """Pairing / handshake rejected by the machine (re-auth required)."""
 
 
+class JuraBrewNotStartedError(JuraBackendError):
+    """The machine ACKed the recipe but showed no brew progress in time.
+
+    Typical while it is still heating up: it accepts ``@TP:`` and never
+    dispenses. The follow stops early instead of holding the session.
+    """
+
+
 class JuraBackend(ABC):
     """Async-facing protocol used by the coordinator and config flow."""
 
@@ -101,9 +109,17 @@ class JuraBackend(ABC):
         """Unlock the front-panel display."""
 
     @abstractmethod
-    async def follow_brew(self, recipe_hex: str, *, follow_seconds: float = 120.0) -> dict[str, Any]:
+    async def follow_brew(
+        self,
+        recipe_hex: str,
+        *,
+        follow_seconds: float = 120.0,
+        start_timeout: float = 30.0,
+    ) -> dict[str, Any]:
         """Start a brew from a raw recipe hex and follow its ``@TV:`` progress stream.
 
+        Raises :class:`JuraBrewNotStartedError` when no progress frame arrives
+        within ``start_timeout`` seconds after the ACK.
         Returns ``{"ack": str, "frames": [ProductProgress.to_dict()...]}``.
         """
 

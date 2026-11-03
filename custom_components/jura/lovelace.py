@@ -31,7 +31,6 @@ from homeassistant.components import websocket_api
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from jura_connect import (
     KIND_COFFEE_STRENGTH,
@@ -182,13 +181,27 @@ def products_payload(profile: MachineProfile | None) -> list[dict[str, Any]]:
     ]
 
 
-def _machine_entities(hass: HomeAssistant, slug: str) -> dict[str, str | None]:
+def _machine_entities(hass: HomeAssistant, slug: str) -> tuple[dict[str, str | None], str | None]:
+    """Key entity ids of one machine, plus its device id.
+
+    The device id comes from the entities' registry entries, so the device
+    registry is not touched at all (its lookup API keeps changing; HA logged
+    a deprecation for this integration).
+    """
     registry = er.async_get(hass)
-    return {
+    entities = {
         "status": registry.async_get_entity_id("sensor", DOMAIN, f"{DOMAIN}_{slug}_state"),
         "connectivity": registry.async_get_entity_id("binary_sensor", DOMAIN, f"{DOMAIN}_{slug}_connectivity"),
         "progress": registry.async_get_entity_id("sensor", DOMAIN, f"{DOMAIN}_{slug}_brew_progress"),
+        "brew_button": registry.async_get_entity_id("button", DOMAIN, f"{DOMAIN}_{slug}_brew"),
     }
+    device_id = None
+    for entity_id in entities.values():
+        entry = registry.async_get(entity_id) if entity_id else None
+        if entry is not None and getattr(entry, "device_id", None):
+            device_id = entry.device_id
+            break
+    return entities, device_id
 
 
 def _load_profile(machine_type: str | None) -> MachineProfile | None:
@@ -211,7 +224,6 @@ async def ws_machines(hass: HomeAssistant, connection: Any, msg: dict[str, Any])
     "not reachable" state instead of "no machine found". ``state`` is the
     config entry state (``loaded``, ``setup_retry``, ...).
     """
-    devices = dr.async_get(hass)
     coordinators = hass.data.get(DOMAIN, {})
     machines = []
     for entry in sorted(hass.config_entries.async_entries(DOMAIN), key=lambda e: e.entry_id):
@@ -222,15 +234,15 @@ async def ws_machines(hass: HomeAssistant, connection: Any, msg: dict[str, Any])
             # Disk read (lru-cached in jura_connect): keep it off the loop.
             profile = await hass.async_add_executor_job(_load_profile, entry.data.get(CONF_MACHINE_TYPE))
         slug = str(entry.data.get(CONF_CONN_ID, "")).replace("-", "_").lower()
-        device = devices.async_get_device(identifiers={(DOMAIN, entry.entry_id)})
+        entities, device_id = _machine_entities(hass, slug)
         state = getattr(entry.state, "value", entry.state)
         machines.append(
             {
                 "entry_id": entry.entry_id,
                 "title": entry.title,
                 "state": str(state),
-                "device_id": device.id if device is not None else None,
-                "entities": _machine_entities(hass, slug),
+                "device_id": device_id,
+                "entities": entities,
                 "products": products_payload(profile),
             }
         )

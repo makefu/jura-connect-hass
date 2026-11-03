@@ -7,6 +7,7 @@ the approach used by the ha_stadtbibliothek_opus template.
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 from enum import Enum
 from types import ModuleType
@@ -286,8 +287,9 @@ _make_module(
 
 # --- homeassistant.helpers.entity_registry ---
 class _EntityRegistryEntry:
-    def __init__(self, config_entry_id=None):
+    def __init__(self, config_entry_id=None, device_id=None):
         self.config_entry_id = config_entry_id
+        self.device_id = device_id
 
 
 class _EntityRegistry:
@@ -298,8 +300,14 @@ class _EntityRegistry:
     def async_get(self, entity_id: str) -> _EntityRegistryEntry | None:
         return self._entries.get(entity_id)
 
-    def add(self, entity_id: str, config_entry_id: str | None = None, unique_id: str | None = None) -> None:
-        self._entries[entity_id] = _EntityRegistryEntry(config_entry_id)
+    def add(
+        self,
+        entity_id: str,
+        config_entry_id: str | None = None,
+        unique_id: str | None = None,
+        device_id: str | None = None,
+    ) -> None:
+        self._entries[entity_id] = _EntityRegistryEntry(config_entry_id, device_id)
         if unique_id is not None:
             self._unique_ids[(entity_id.split(".", 1)[0], unique_id)] = entity_id
 
@@ -690,6 +698,16 @@ def sample_snapshot() -> MachineSnapshot:
             "language": "02",
         },
     )
+
+
+@pytest.fixture
+def ready_snapshot(sample_snapshot) -> MachineSnapshot:
+    """``sample_snapshot`` with the machine ready to brew.
+
+    ``sample_snapshot`` reports ``heating_up``, during which brewing is
+    refused (the machine ACKs a recipe but never brews it).
+    """
+    return dataclasses.replace(sample_snapshot, active_alerts=("coffee_ready",))
 
 
 @pytest.fixture

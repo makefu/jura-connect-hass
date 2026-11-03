@@ -3,6 +3,7 @@
 All machine I/O is mocked; these tests never contact a device.
 """
 
+import dataclasses
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
 
@@ -147,6 +148,8 @@ async def test_followed_brew_does_not_fabricate_a_successful_poll(mock_backend, 
     clock = freeze_clock(monkeypatch)
     coordinator = make_coordinator(mock_backend, fake_config_entry)
     coordinator.data = await coordinator._async_update_data()
+    # Ready to brew (the mocked snapshot reports heating_up, which refuses brews).
+    coordinator.data = dataclasses.replace(coordinator.data, active_alerts=("coffee_ready",))
     coordinator.async_request_refresh = AsyncMock()
     mock_backend.follow_brew = AsyncMock(return_value={"ack": "@tp", "frames": []})
     # Advance past the last poll: any spurious renewal inside run_brew would

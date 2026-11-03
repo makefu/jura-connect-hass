@@ -423,16 +423,16 @@ def test_button_name_and_unique_id():
     assert button.unique_id.endswith("homeassistant_test_brew")
 
 
-def test_button_unavailable_while_product_blocked(sample_snapshot):
+def test_button_unavailable_while_product_blocked(ready_snapshot):
     """A machine-declared blocking alert for the staged product's kind
     makes the brew button unavailable instead of erroring on press."""
     coordinator = _coordinator()  # espresso (kind C) selected
     button = JuraBrewButton(coordinator, _entry())
-    coordinator.data = sample_snapshot
+    coordinator.data = ready_snapshot
     assert button.available is True
-    coordinator.data = dataclasses.replace(sample_snapshot, blocked_products=("espresso",))
+    coordinator.data = dataclasses.replace(ready_snapshot, blocked_products=("espresso",))
     assert button.available is False
-    coordinator.data = dataclasses.replace(sample_snapshot, blocked_products=("latte_macchiato",))
+    coordinator.data = dataclasses.replace(ready_snapshot, blocked_products=("latte_macchiato",))
     assert button.available is True
 
 

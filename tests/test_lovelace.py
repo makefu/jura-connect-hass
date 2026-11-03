@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -9,7 +10,6 @@ import pytest
 
 jura_connect = pytest.importorskip("jura_connect")
 
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from jura_connect import load_profile
 
@@ -229,11 +229,13 @@ async def test_ws_machines_lists_machines_with_device_and_entities():
     entry = _entry()
     hass = _ws_hass([entry], {"e1": SimpleNamespace(config_entry=entry, brew_profile=_PROFILE)})
 
-    dr.async_get(hass).add({(DOMAIN, "e1")}, "dev-1")
     registry = er.async_get(hass)
-    registry.add("sensor.kaffeebert_status", "e1", unique_id=f"{DOMAIN}_abc_123_state")
+    registry.add("sensor.kaffeebert_status", "e1", unique_id=f"{DOMAIN}_abc_123_state", device_id="dev-1")
     registry.add("binary_sensor.kaffeebert_connectivity", "e1", unique_id=f"{DOMAIN}_abc_123_connectivity")
     registry.add("sensor.kaffeebert_brew_progress", "e1", unique_id=f"{DOMAIN}_abc_123_brew_progress")
+    registry.add("button.kaffeebert_brew", "e1", unique_id=f"{DOMAIN}_abc_123_brew")
+    # Regression: HA logged a device-registry deprecation for this
+    # integration; the device id now comes from the entity registry.
 
     (machine,) = await _ws_result(hass)
     assert machine["entry_id"] == "e1"
@@ -244,8 +246,16 @@ async def test_ws_machines_lists_machines_with_device_and_entities():
         "status": "sensor.kaffeebert_status",
         "connectivity": "binary_sensor.kaffeebert_connectivity",
         "progress": "sensor.kaffeebert_brew_progress",
+        "brew_button": "button.kaffeebert_brew",
     }
     assert machine["products"] == lovelace.products_payload(_PROFILE)
+
+
+def test_lovelace_does_not_use_the_device_registry():
+    """HA deprecates device-registry lookups over time; we need none."""
+    source = Path(lovelace.__file__).read_text(encoding="utf-8")
+    assert "device_registry" not in source
+    assert "async_get_device" not in source
 
 
 async def test_ws_machines_lists_machine_whose_setup_is_retrying():

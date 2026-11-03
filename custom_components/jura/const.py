@@ -94,6 +94,50 @@ STATE_PRIORITY: tuple[str, ...] = (
 )
 STATE_IDLE = "idle"
 
+# Active alerts during which the machine cannot start a drink: it is busy
+# (heating, rinsing, filling) or waits for the user (water, tray, grounds,
+# covers, errors). While any is active the Brew button is unavailable and
+# brew requests are refused with ``machine_not_ready`` instead of being sent
+# -- the machine ACKs a recipe while heating but never brews it, and
+# following that phantom brew held the single dongle session for minutes.
+# Maintenance reminders (descale/filter/cleaning alerts) and bean/milk hints
+# do not block: the machine still brews.
+BREW_BLOCKING_ALERTS: frozenset[str] = frozenset(
+    {
+        "heating_up",
+        "system_filling",
+        "system_emptying",
+        "coffee_rinsing",
+        "press_rinse",
+        "please_wait",
+        "goodbye",
+        "fill_water",
+        "fill_system",
+        "empty_grounds",
+        "empty_tray",
+        "insert_tray",
+        "insert_coffee_bin",
+        "outlet_missing",
+        "rear_cover_missing",
+        "remove_water_tank",
+        "error_status",
+        "program_mode_status",
+    }
+)
+
+# Poll faster while the machine is in a transient busy state (heating up,
+# rinsing, ...), so the Brew button comes back soon after it is ready.
+BUSY_SCAN_INTERVAL = 15  # seconds
+BUSY_ALERTS: frozenset[str] = frozenset(
+    {"heating_up", "system_filling", "system_emptying", "coffee_rinsing", "press_rinse", "please_wait", "goodbye"}
+)
+
+# A brew whose recipe the machine ACKed must show progress within this many
+# seconds, else the integration stops following it (the machine did not
+# start, e.g. still heating up) instead of holding the dongle session for
+# the whole follow window.
+BREW_START_TIMEOUT = 30.0  # seconds
+
 # Alerts that we expose as dedicated binary_sensor entities. The value is the
 # Home Assistant device_class for the entity. Problem-class alerts stay in
 # the default category; running and informational alerts move to

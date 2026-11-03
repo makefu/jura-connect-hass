@@ -11,7 +11,9 @@ try:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.const import Platform
     from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
+    from homeassistant.helpers import config_validation as cv
     from homeassistant.helpers import entity_registry as er
+    from homeassistant.helpers.typing import ConfigType
     from jura_connect import (
         KIND_COFFEE_STRENGTH,
         KIND_GRINDER_RATIO,
@@ -25,6 +27,7 @@ try:
 
     from .const import CONF_MACHINE_TYPE, DOMAIN
     from .coordinator import JuraCoordinator
+    from .lovelace import async_setup_lovelace
 
     _HAS_HOMEASSISTANT = True
 except ImportError:
@@ -32,6 +35,9 @@ except ImportError:
 
 
 if _HAS_HOMEASSISTANT:
+    # Config-entry only; declared so hassfest accepts async_setup below.
+    CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
     PLATFORMS = [
         Platform.SENSOR,
         Platform.BINARY_SENSOR,
@@ -166,6 +172,19 @@ def _get_coordinator(hass: HomeAssistant, config_entry_id: str) -> JuraCoordinat
     return hass.data[DOMAIN][config_entry_id]
 
 
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the domain: serve + auto-load the bundled dashboard cards.
+
+    Runs once, early in startup and before any machine I/O. Registering the
+    cards from the config-entry setup instead made them depend on the first
+    machine poll (session quiet period, a sleeping dongle -> setup retry);
+    frontends served in the meantime never loaded them ("Custom element not
+    found: jura-coffee-button-card").
+    """
+    await async_setup_lovelace(hass)
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Jura from a config entry."""
     # Warm the jura_connect profile cache off the event loop. load_profile
@@ -226,6 +245,8 @@ def _register_services(hass: HomeAssistant) -> None:
         coordinator = _get_coordinator(hass, config_entry_id)
         product_name = call.data.get("product")
         recipe = call.data.get("recipe")
+        # Profile product name for the per-product "can it brew now" check.
+        brew_product: str | None = None
         if product_name and recipe:
             raise vol.Invalid("Provide either product or recipe, not both")
         if product_name:
@@ -239,9 +260,10 @@ def _register_services(hass: HomeAssistant) -> None:
                 if value is not None:
                     overrides[kind] = value
             recipe = product.build_recipe_hex(overrides)
+            brew_product = product.name
         elif not recipe:
             raise vol.Invalid("Provide either product or recipe")
-        return await coordinator.run_brew(recipe)
+        return await coordinator.run_brew(recipe, product=brew_product)
 
     hass.services.async_register(
         DOMAIN,

@@ -144,6 +144,8 @@ async def test_fetch_surfaces_blocked_products(running_simulator):
     assert "espresso" in snapshot.blocked_products  # kind C
     assert "cappuccino" in snapshot.blocked_products  # kind CM also blocked by no_beans
     assert "milk_foam" not in snapshot.blocked_products  # kind M stays brewable
+    # The reason travels along, for "not ready (no beans)" messages.
+    assert "no_beans" in snapshot.blocking_alerts
 
 
 async def test_follow_brew_progress():
@@ -347,3 +349,64 @@ async def test_machine_type_from_article_offloads_blocking_lookup(monkeypatch):
 
     monkeypatch.setattr(jura_backend, "lookup_by_article_number", lambda _n: None)
     assert await machine_type_from_article(15001) is None
+
+
+async def test_follow_brew_stops_when_the_machine_never_starts():
+    """Regression: a heating machine ACKs the recipe but never brews. The
+    follow used to wait the whole follow window (120 s) holding the only
+    dongle session, so polls queued and HA showed "heating_up" forever."""
+    import time
+
+    from jura_connect import load_profile
+
+    from custom_components.jura.backends.base import JuraBrewNotStartedError
+
+    # ACK + brew-start marker, then only the periodic @TF: status pushes.
+    cfg = simulator.SimulatorConfig(
+        require_user_accept=False, allow_brew=True, brew_script=["@TB"], status_interval=0.2
+    )
+    with simulator.run_in_thread(cfg) as sim:
+        host, port = sim.address
+        backend = JuraConnectBackend(host, port, conn_id="ha-test")
+        await backend.pair()
+        recipe = load_profile("EF1091").product_by_code[0x02].build_recipe_hex({})
+
+        started = time.monotonic()
+        with pytest.raises(JuraBrewNotStartedError):
+            await backend.follow_brew(recipe, follow_seconds=60, start_timeout=1.0)
+        assert time.monotonic() - started < 10
+
+        # The session is free again: a poll goes through right away.
+        snapshot = await backend.fetch()
+        assert snapshot.handshake_state == "CORRECT"
+
+
+async def test_follow_brew_hard_budget_closes_a_stuck_session(monkeypatch):
+    """Last line of defence: a worker blocked past the budget gets its socket
+    closed and the coordinator gets an error instead of waiting forever."""
+    import threading
+
+    from custom_components.jura.backends.base import JuraBackendError
+
+    released = threading.Event()
+
+    class StuckConn:
+        def close(self):
+            released.set()
+
+    class StuckClient:
+        conn = StuckConn()
+
+        def connect(self):
+            released.wait(5)  # blocks until the socket is closed
+            raise OSError("socket closed")
+
+        def close(self):
+            pass
+
+    backend = JuraConnectBackend("192.0.2.10", 51515, conn_id="ha-test", read_timeout=0.01)
+    monkeypatch.setattr(backend, "_make_client", StuckClient)
+    monkeypatch.setattr(jura_backend, "_BREW_BUDGET_MARGIN", 0.1)
+    with pytest.raises(JuraBackendError, match="did not finish"):
+        await backend.follow_brew("02", follow_seconds=0.01, start_timeout=0.01)
+    assert released.is_set()

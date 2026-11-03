@@ -1,4 +1,4 @@
-// Regression tests for www/jura-brew-card.js, run with `node --test tests/`.
+// Regression tests for custom_components/jura/www/jura-brew-card.js, run with `node --test tests/`.
 // The card is a plain browser script, so it is evaluated in a vm with a
 // minimal DOM stub; no bundler or npm deps.
 //
@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
-const src = readFileSync(new URL("../www/jura-brew-card.js", import.meta.url), "utf8");
+const src = readFileSync(new URL("../custom_components/jura/www/jura-brew-card.js", import.meta.url), "utf8");
 
 class FakeEl {
   constructor() {
@@ -204,4 +204,16 @@ test("online machine renders status pill, not Offline", () => {
   assert.equal(pillText.textContent, "Ready");
   assert.ok(pill._cls.has("ready"));
   assert.equal(brew.disabled, false);
+});
+
+test("connectivity unavailable (integration not loaded) renders Offline", () => {
+  const Card = loadCard();
+  const states = {
+    ...driftedStates,
+    "binary_sensor.kaffeebert_connectivity": { entity_id: "binary_sensor.kaffeebert_connectivity", state: "unavailable", attributes: {} },
+    "button.kuche_kaffeebert_brew": { entity_id: "button.kuche_kaffeebert_brew", state: "unknown", attributes: {} },
+  };
+  const { pillText, brew } = pillAndButton(render(Card, states));
+  assert.equal(pillText.textContent, "Offline");
+  assert.equal(brew.disabled, true);
 });

@@ -7,6 +7,7 @@ the approach used by the ha_stadtbibliothek_opus template.
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 from enum import Enum
 from types import ModuleType
@@ -215,7 +216,11 @@ _make_module(
 
 # --- homeassistant.exceptions ---
 class HomeAssistantError(Exception):
-    pass
+    def __init__(self, *args, translation_domain=None, translation_key=None, translation_placeholders=None):
+        super().__init__(*args)
+        self.translation_domain = translation_domain
+        self.translation_key = translation_key
+        self.translation_placeholders = translation_placeholders
 
 
 class ConfigEntryAuthFailed(HomeAssistantError):
@@ -232,6 +237,10 @@ _make_module(
 # --- homeassistant.helpers ---
 _make_module("homeassistant.helpers")
 _make_module("homeassistant.helpers.typing", ConfigType=dict)
+_make_module(
+    "homeassistant.helpers.config_validation",
+    config_entry_only_config_schema=lambda domain: {"config_entry_only": domain},
+)
 
 
 # --- homeassistant.helpers.entity ---
@@ -250,24 +259,60 @@ class DeviceEntryType:
     SERVICE = "service"
 
 
-_make_module("homeassistant.helpers.device_registry", DeviceEntryType=DeviceEntryType)
+class _DeviceEntry:
+    def __init__(self, device_id: str):
+        self.id = device_id
+
+
+class _DeviceRegistry:
+    def __init__(self):
+        self._devices: dict[frozenset, _DeviceEntry] = {}
+
+    def async_get_device(self, identifiers=None, connections=None) -> _DeviceEntry | None:
+        return self._devices.get(frozenset(identifiers or ()))
+
+    def add(self, identifiers, device_id: str) -> None:
+        self._devices[frozenset(identifiers)] = _DeviceEntry(device_id)
+
+
+_device_registry_instance = _DeviceRegistry()
+
+
+_make_module(
+    "homeassistant.helpers.device_registry",
+    DeviceEntryType=DeviceEntryType,
+    async_get=lambda hass: _device_registry_instance,
+)
 
 
 # --- homeassistant.helpers.entity_registry ---
 class _EntityRegistryEntry:
-    def __init__(self, config_entry_id=None):
+    def __init__(self, config_entry_id=None, device_id=None):
         self.config_entry_id = config_entry_id
+        self.device_id = device_id
 
 
 class _EntityRegistry:
     def __init__(self):
         self._entries: dict[str, _EntityRegistryEntry] = {}
+        self._unique_ids: dict[tuple[str, str], str] = {}
 
     def async_get(self, entity_id: str) -> _EntityRegistryEntry | None:
         return self._entries.get(entity_id)
 
-    def add(self, entity_id: str, config_entry_id: str | None = None) -> None:
-        self._entries[entity_id] = _EntityRegistryEntry(config_entry_id)
+    def add(
+        self,
+        entity_id: str,
+        config_entry_id: str | None = None,
+        unique_id: str | None = None,
+        device_id: str | None = None,
+    ) -> None:
+        self._entries[entity_id] = _EntityRegistryEntry(config_entry_id, device_id)
+        if unique_id is not None:
+            self._unique_ids[(entity_id.split(".", 1)[0], unique_id)] = entity_id
+
+    def async_get_entity_id(self, domain: str, platform: str, unique_id: str) -> str | None:
+        return self._unique_ids.get((domain, unique_id))
 
 
 _entity_registry_instance = _EntityRegistry()
@@ -528,6 +573,42 @@ class ButtonEntity:
 _make_module("homeassistant.components.button", ButtonEntity=ButtonEntity)
 
 
+# --- dashboard plumbing: http / frontend / websocket_api ---
+class StaticPathConfig:
+    def __init__(self, url_path, path, cache_headers=True):
+        self.url_path = url_path
+        self.path = path
+        self.cache_headers = cache_headers
+
+
+def _add_extra_js_url(hass, url, es5=False):
+    key = "frontend_extra_js_url_es5" if es5 else "frontend_extra_module_url"
+    hass.data.setdefault(key, []).append(url)
+
+
+def _websocket_command(schema):
+    def decorator(func):
+        func.ws_type = next(iter(schema.values()))
+        return func
+
+    return decorator
+
+
+def _ws_register_command(hass, handler):
+    hass.data.setdefault("websocket_api", {})[handler.ws_type] = handler
+
+
+_make_module("homeassistant.components")
+_make_module("homeassistant.components.http", StaticPathConfig=StaticPathConfig)
+_make_module("homeassistant.components.frontend", add_extra_js_url=_add_extra_js_url)
+_make_module(
+    "homeassistant.components.websocket_api",
+    websocket_command=_websocket_command,
+    async_response=lambda func: func,
+    async_register_command=_ws_register_command,
+)
+
+
 # --- homeassistant.components.binary_sensor ---
 class BinarySensorEntity:
     @property
@@ -617,6 +698,16 @@ def sample_snapshot() -> MachineSnapshot:
             "language": "02",
         },
     )
+
+
+@pytest.fixture
+def ready_snapshot(sample_snapshot) -> MachineSnapshot:
+    """``sample_snapshot`` with the machine ready to brew.
+
+    ``sample_snapshot`` reports ``heating_up``, during which brewing is
+    refused (the machine ACKs a recipe but never brews it).
+    """
+    return dataclasses.replace(sample_snapshot, active_alerts=("coffee_ready",))
 
 
 @pytest.fixture

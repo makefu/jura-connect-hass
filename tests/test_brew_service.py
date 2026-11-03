@@ -113,7 +113,7 @@ async def test_brew_by_product_uses_xml_defaults():
     call = MagicMock()
     call.data = {"config_entry_id": "test_entry_id", "product": "espresso_doppio"}
     await _brew_handler(hass)(call)
-    coordinator.run_brew.assert_awaited_once_with(_DEFAULT_RECIPE)
+    coordinator.run_brew.assert_awaited_once_with(_DEFAULT_RECIPE, product="espresso_doppio")
 
 
 async def test_brew_by_product_with_overrides():
@@ -129,7 +129,7 @@ async def test_brew_by_product_with_overrides():
         "temperature": 1,
     }
     await _brew_handler(hass)(call)
-    coordinator.run_brew.assert_awaited_once_with(_OVERRIDE_RECIPE)
+    coordinator.run_brew.assert_awaited_once_with(_OVERRIDE_RECIPE, product="espresso_doppio")
 
 
 async def test_brew_by_product_with_milk_foam_override():
@@ -144,7 +144,7 @@ async def test_brew_by_product_with_milk_foam_override():
         "milk_foam_s": 12,
     }
     await _brew_handler(hass)(call)
-    coordinator.run_brew.assert_awaited_once_with(_MILK_FOAM_RECIPE)
+    coordinator.run_brew.assert_awaited_once_with(_MILK_FOAM_RECIPE, product="cappuccino")
 
 
 async def test_brew_by_product_with_grinder_ratio_override():
@@ -164,7 +164,7 @@ async def test_brew_by_product_with_grinder_ratio_override():
 
     espresso = load_profile("EF566").product_by_code[0x02]
     expected = espresso.build_recipe_hex({KIND_GRINDER_RATIO: "0_100"})
-    coordinator.run_brew.assert_awaited_once_with(expected)
+    coordinator.run_brew.assert_awaited_once_with(expected, product="espresso")
 
 
 async def test_brew_schema_preserves_grinder_ratio_item_names():
@@ -204,7 +204,7 @@ async def test_brew_by_product_code_resolves():
     call = MagicMock()
     call.data = {"config_entry_id": "test_entry_id", "product": "30"}
     await _brew_handler(hass)(call)
-    coordinator.run_brew.assert_awaited_once_with(_DEFAULT_RECIPE)
+    coordinator.run_brew.assert_awaited_once_with(_DEFAULT_RECIPE, product="espresso_doppio")
 
 
 async def test_brew_by_product_out_of_range_water_raises():
@@ -242,7 +242,7 @@ async def test_brew_legacy_recipe_path_preserved():
     call = MagicMock()
     call.data = {"config_entry_id": "test_entry_id", "recipe": "01"}
     await _brew_handler(hass)(call)
-    coordinator.run_brew.assert_awaited_once_with("01")
+    coordinator.run_brew.assert_awaited_once_with("01", product=None)
 
 
 async def test_brew_rejects_product_and_recipe_together():

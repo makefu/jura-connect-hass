@@ -9,7 +9,9 @@ keeps running on the event loop.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -33,10 +35,15 @@ from .base import (
     JuraAuthError,
     JuraBackend,
     JuraBackendError,
+    JuraBrewNotStartedError,
     MachineSnapshot,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Slack on top of follow + start + read timeouts before a brew session that
+# is still blocked counts as stuck and its socket gets closed.
+_BREW_BUDGET_MARGIN = 15.0
 
 
 def _resolve_profile_and_name(machine_type: str | None) -> tuple[MachineProfile | None, str | None]:
@@ -178,6 +185,7 @@ class JuraConnectBackend(JuraBackend):
                 machine_type_name=self._machine_type_name,
                 settings=settings_values,
                 blocked_products=tuple(info.status.blocked_products),
+                blocking_alerts=tuple(info.status.blocking_alerts),
                 progress=None,
             )
 
@@ -267,16 +275,33 @@ class JuraConnectBackend(JuraBackend):
 
         return await asyncio.to_thread(_do)
 
-    async def follow_brew(self, recipe_hex: str, *, follow_seconds: float = 120.0) -> dict[str, Any]:
+    async def follow_brew(
+        self,
+        recipe_hex: str,
+        *,
+        follow_seconds: float = 120.0,
+        start_timeout: float = 30.0,
+    ) -> dict[str, Any]:
         """Send ``@TP:<recipe>`` and watch ``@TV:`` progress until ENJOY/timeout.
 
         The session stays open for the whole dispense, so the coordinator
         suppresses offline classification while this runs. Returns
         ``{"ack": str, "frames": [ProductProgress.to_dict()...]}``.
+
+        Bounded twice, because the dongle serves one session at a time and
+        everything else (polls, other commands) waits for this one:
+
+        * no progress frame within ``start_timeout`` after the ACK -> the
+          machine did not start (e.g. heating up; it ACKs and ignores the
+          recipe) -> :class:`JuraBrewNotStartedError`;
+        * a hard overall budget; if the worker thread is still blocked after
+          it, its socket is closed so the thread ends and the session frees.
         """
+        holder: dict[str, Any] = {}
 
         def _do() -> dict[str, Any]:
             client = self._make_client()
+            holder["client"] = client
             try:
                 handshake = client.connect()
                 if handshake.state != "CORRECT":
@@ -284,7 +309,16 @@ class JuraConnectBackend(JuraBackend):
                 ack = client.request(f"@TP:{recipe_hex}", match=BREW_REPLY_MATCH, timeout=self.read_timeout)
                 if ack.lower().startswith("@an:error"):
                     raise JuraBackendError(f"machine refused brew: {ack}")
-                frames = [p.to_dict() for p in client.follow_progress(timeout=follow_seconds)]
+                deadline = time.monotonic() + follow_seconds
+                first = next(iter(client.iter_progress(timeout=min(start_timeout, follow_seconds))), None)
+                if first is None:
+                    raise JuraBrewNotStartedError(f"no brew progress within {start_timeout:.0f}s after {ack!r}")
+                frames = [first.to_dict()]
+                if not first.is_complete:
+                    for update in client.iter_progress(until=deadline):
+                        frames.append(update.to_dict())
+                        if update.is_complete:
+                            break
             except HandshakeError as err:
                 raise JuraAuthError(str(err)) from err
             except OSError as err:
@@ -293,7 +327,16 @@ class JuraConnectBackend(JuraBackend):
                 client.close()
             return {"ack": ack, "frames": frames}
 
-        return await asyncio.to_thread(_do)
+        budget = follow_seconds + start_timeout + 3 * self.read_timeout + _BREW_BUDGET_MARGIN
+        try:
+            return await asyncio.wait_for(asyncio.to_thread(_do), budget)
+        except TimeoutError:
+            client = holder.get("client")
+            if client is not None:
+                with contextlib.suppress(Exception):
+                    client.conn.close()
+            # `from None`: a stuck session is not proof the machine is off.
+            raise JuraBackendError(f"brew session did not finish within {budget:.0f}s") from None
 
 
 # --------------------------------------------------------------------- #

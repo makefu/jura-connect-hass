@@ -14,15 +14,25 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from jura_connect import MachineProfile, ProductDef, load_profile
 
-from .backends.base import JuraAuthError, JuraBackend, JuraBackendError, MachineSnapshot
+from .backends.base import (
+    JuraAuthError,
+    JuraBackend,
+    JuraBackendError,
+    JuraBrewNotStartedError,
+    MachineSnapshot,
+)
 from .backends.jura import JuraConnectBackend
 from .brew import remember_param, selection_for_product
 from .const import (
+    BREW_BLOCKING_ALERTS,
+    BREW_START_TIMEOUT,
+    BUSY_ALERTS,
+    BUSY_SCAN_INTERVAL,
     CONF_AUTH_HASH,
     CONF_BREW_FOLLOW_SECONDS,
     CONF_CONN_ID,
@@ -34,6 +44,7 @@ from .const import (
     DEFAULT_PORT,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    STATE_PRIORITY,
 )
 
 # Narrow seam so cooldown tests can fake sleeping without proxying asyncio.
@@ -127,6 +138,14 @@ def _is_offline_error(err: BaseException) -> bool:
     return any(hint in text for hint in _OFFLINE_MESSAGE_HINTS)
 
 
+def _first_by_priority(alerts: set[str]) -> str | None:
+    """The alert the status sensor would show first; unknown ones last, sorted."""
+    for name in STATE_PRIORITY:
+        if name in alerts:
+            return name
+    return next(iter(sorted(alerts)), None)
+
+
 class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
     """Polls one Jura machine and serves snapshots to entities."""
 
@@ -207,6 +226,9 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
         # True while a followed brew holds the session; suppresses offline
         # classification for polls that collide with it.
         self._follow_brew_active = False
+        # True from accepting a brew until it is done (including the wait for
+        # the session lock): a second brew is refused, never queued.
+        self.brew_pending = False
         # Poll health is separate from the retained last-known snapshot: a
         # tolerated offline poll must not look like a fresh successful read.
         self.last_successful_update: str | None = None
@@ -372,6 +394,9 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
         self.last_successful_update = datetime.now(UTC).isoformat()
         self.last_poll_success = True
         self._consecutive_offline = 0
+        # Heating up / rinsing: poll faster so the Brew button returns soon.
+        busy = bool(BUSY_ALERTS.intersection(snapshot.active_alerts))
+        self.update_interval = timedelta(seconds=BUSY_SCAN_INTERVAL if busy else DEFAULT_SCAN_INTERVAL)
         return snapshot
 
     def _handle_offline_poll(self, err: BaseException) -> MachineSnapshot:
@@ -430,27 +455,108 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
         await self.async_request_refresh()
         return result
 
-    async def run_brew(self, recipe: str, *, follow_seconds: float | None = None) -> dict[str, Any]:
+    def brew_blocker(self, product: str | None = None) -> str | None:
+        """The active alert that prevents brewing right now, or ``None``.
+
+        Machine-wide blockers first (:data:`BREW_BLOCKING_ALERTS`, e.g.
+        heating up, switch-off delay), then -- for ``product`` -- the
+        profile's per-product blocking reported by the machine
+        (``blocked_products``, e.g. no milk drinks while the milk system
+        needs cleaning). Highest-priority alert first, same order as the
+        status sensor. ``None`` without a snapshot or while OFFLINE:
+        reachability is judged separately.
+        """
+        snapshot = self.data
+        if snapshot is None or snapshot.handshake_state == HANDSHAKE_STATE_OFFLINE:
+            return None
+        blocker = _first_by_priority(set(snapshot.active_alerts) & BREW_BLOCKING_ALERTS)
+        if blocker is not None:
+            return blocker
+        if product is not None and product.casefold() in {p.casefold() for p in snapshot.blocked_products}:
+            return _first_by_priority(set(snapshot.blocking_alerts)) or "product_blocked"
+        return None
+
+    def _set_brew_pending(self, pending: bool) -> None:
+        self.brew_pending = pending
+        self.async_update_listeners()
+
+    async def run_brew(
+        self,
+        recipe: str,
+        *,
+        follow_seconds: float | None = None,
+        product: str | None = None,
+    ) -> dict[str, Any]:
         """Start a brew and follow its progress stream, then refresh state.
 
         Blocks for the duration of the dispense (bounded by
         ``follow_seconds``) because the ``@TV:`` stream needs the session
         open. Defaults to the ``brew_follow_seconds`` entry option. Polls
         colliding with it are not treated as an outage.
+
+        Refused up front (translated ``HomeAssistantError``) while another
+        brew runs (``brew_in_progress``) or the machine is not ready
+        (``machine_not_ready``, e.g. heating up, switching off, or the
+        requested ``product`` blocked by the machine): the machine ACKs a
+        recipe it cannot brew and silently ignores it. Failures surface as translated
+        errors too: ``machine_unreachable`` (and the machine is marked
+        OFFLINE at once), ``brew_not_started`` (no progress after the ACK),
+        ``brew_failed``.
         """
+        if self.brew_pending:
+            raise HomeAssistantError(translation_domain=DOMAIN, translation_key="brew_in_progress")
+        blocker = self.brew_blocker(product)
+        if blocker is not None:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="machine_not_ready",
+                translation_placeholders={"state": blocker.replace("_", " ")},
+            )
         if follow_seconds is None:
             follow_seconds = self.brew_follow_seconds
-        async with self._machine_session():
-            self._follow_brew_active = True
-            try:
-                result = await self.backend.follow_brew(recipe, follow_seconds=follow_seconds)
-            finally:
-                self._follow_brew_active = False
+        self._set_brew_pending(True)
+        try:
+            async with self._machine_session():
+                self._follow_brew_active = True
+                try:
+                    result = await self.backend.follow_brew(
+                        recipe, follow_seconds=follow_seconds, start_timeout=BREW_START_TIMEOUT
+                    )
+                finally:
+                    self._follow_brew_active = False
+        except JuraAuthError as err:
+            raise ConfigEntryAuthFailed(f"authentication failed: {err}") from err
+        except JuraBrewNotStartedError as err:
+            await self.async_request_refresh()
+            raise HomeAssistantError(translation_domain=DOMAIN, translation_key="brew_not_started") from err
+        except JuraBackendError as err:
+            if _is_offline_error(err):
+                self.mark_offline(err)
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="machine_unreachable",
+                ) from err
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="brew_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
+        finally:
+            self._set_brew_pending(False)
         await self.async_request_refresh()
         frames = result.get("frames") or []
         if self.data is not None:
             self.async_set_updated_data(dataclasses.replace(self.data, progress=frames[-1] if frames else None))
         return result
+
+    def mark_offline(self, err: BaseException) -> None:
+        """A command proved the machine unreachable: surface OFFLINE now.
+
+        Skips the poll tolerance (meant for polls racing our own sessions);
+        the next successful poll brings the machine back as usual.
+        """
+        self._consecutive_offline = max(self._consecutive_offline, OFFLINE_TOLERANCE - 1)
+        self.async_set_updated_data(self._handle_offline_poll(err))
 
     async def write_setting(self, name: str, value: str) -> None:
         """Write a machine setting (validated by the profile) and reflect it

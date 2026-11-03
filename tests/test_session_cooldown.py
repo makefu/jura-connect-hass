@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.jura import coordinator as coordinator_module
@@ -127,7 +128,8 @@ async def test_error_stamps_end_and_is_never_retried(mock_backend, fake_config_e
         raise JuraBackendError("invalid transport response")
 
     operation.side_effect = fail
-    with pytest.raises((UpdateFailed, JuraBackendError)):
+    # Brews surface failures as translated HomeAssistantError.
+    with pytest.raises((UpdateFailed, JuraBackendError, HomeAssistantError)):
         await invoke(coordinator, pathway)
     assert operation.await_count == 1
     assert coordinator._last_session_end == 102.0
@@ -269,7 +271,7 @@ async def test_brew_follow_seconds_option_reaches_backend(mock_backend, fake_con
 
     await coordinator.run_brew("mock-recipe")
 
-    mock_backend.follow_brew.assert_awaited_once_with("mock-recipe", follow_seconds=45.0)
+    mock_backend.follow_brew.assert_awaited_once_with("mock-recipe", follow_seconds=45.0, start_timeout=30.0)
 
 
 def test_entry_seconds_precedence(fake_config_entry):

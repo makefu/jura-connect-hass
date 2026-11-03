@@ -84,6 +84,40 @@ for reachability. Turn this off per machine under Advanced settings
 (*Retain last values when offline*, default on); with it off, entities go
 `unavailable` on the second consecutive failed poll.
 
+Actions are the exception: the **Brew button** is unavailable whenever the
+machine is offline, retained values or not, and while it cannot brew:
+heating up, switching off (`switch_off_delay_active`), rinsing, filling,
+*please wait*, or waiting for you (water, grounds, tray, covers, errors).
+On top, every brew checks the drink itself against the products the
+machine currently blocks (e.g. milk drinks while the milk system needs
+cleaning), whether it comes from the button, a card or `jura.brew`. Maintenance reminders such as *descale*
+and hints such as *no beans* do not block. While the machine is heating
+up the integration polls every 15 s instead of 60 s, so the button comes
+back soon after it is ready. A second brew while one is running is
+refused (*A drink is already being brewed.*), never queued.
+
+If the machine accepts a recipe but shows no brew progress within 30 s
+(*The coffee machine did not start brewing…*), the integration stops
+waiting at once instead of holding the machine's only connection for the
+whole follow window; a brew session that is still stuck after its time
+budget is closed. A brew (button, card or
+`jura.brew`) that finds the machine unreachable fails with a clear,
+translated message (*The coffee machine is not reachable…*) and marks the
+machine offline immediately, without waiting for the next polls. Other
+brew failures are reported as *Brewing failed: …*.
+
+Home Assistant does not need the machine at startup: when it is off, the
+integration starts with the machine offline. The drinks and their
+parameter ranges come from the bundled machine profile, not from the
+machine, so the dashboard cards show your drink even while the machine is
+unreachable or its setup is being retried, with a hint instead of "no
+machine found", and turn live once it answers.
+
+The status sensor also exposes `brew_ready` (a drink can be started now,
+machine-wide), `brew_blocker` (the alert that prevents it), `brewing` (a
+brew is running) and `blocked_products` (drinks the machine blocks right
+now); the Coffee Button uses them for its drink.
+
 The status sensor exposes `last_successful_update` (UTC ISO timestamp, or
 `null` before the first successful read) and `last_poll_success` (boolean).
 Both keys are always present, even before the first snapshot. Only a
@@ -120,15 +154,75 @@ and keep the machine-supplied name as a placeholder. To add a language, copy
 `translations/de.json` to `translations/<lang>.json` and translate the `name`
 and `state` values.
 
-### Lovelace brew card
+### Lovelace cards
 
-The repo ships a companion dashboard card (`www/jura-brew-card.js`):
-status pill, Product picker, Strength / Water / Temperature sliders and
-a Brew button in one card. Copy the file to your HA `config/www/`
-directory and register it as a *module* dashboard resource pointing at
-`/local/jura-brew-card.js`. HA serves `/local/*` with a 31-day
-`Cache-Control`, so append a version query (`?v=<md5>`) and bump it on
-every card update, or browsers keep serving the stale copy.
+Both dashboard cards ship inside the integration and are **loaded
+automatically** -- no copying to `config/www/`, no manual dashboard
+resource. The integration serves them under `/jura_connect/` and registers
+each one as a dashboard resource (*Settings → Dashboards → Resources*, the
+mechanism HACS uses), so the frontend loads them before it builds any card,
+also on slow wall displays and in the companion apps. The entries carry a
+content hash (`?v=…`) and are created, updated and de-duplicated
+automatically; with resources managed in YAML the integration falls back to
+extra script tags for both frontend builds. After installing (or updating)
+the integration, restart Home Assistant and reload the browser.
+
+The cards also run on older WebViews such as the Shelly Wall Display
+(legacy frontend build, no `color-mix()`, classic script loading).
+
+> Upgrading from a manual setup? Remove the old `/local/jura-brew-card.js`
+> dashboard resource (and the file in `config/www/`); the bundled copy is
+> always the matching version.
+
+#### Jura Coffee Button (`custom:jura-coffee-button-card`)
+
+A compact 2×2 tile for one favourite drink: product, your personal
+parameters and a **Brew** button. Configure it entirely in the visual
+editor -- it lists the products of your machine profile and offers only
+the parameters (strength, water, temperature, grinder ratio, milk, milk
+foam) the chosen product really has, with the profile's ranges. The drink
+(*Getränk*) comes first and is always stored explicitly; a card without
+one shows *Choose a drink* and does not brew. Anything left empty among
+the parameters brews with the product's factory default. Put several tiles
+side by side for "my espresso", "her cappuccino", …
+
+```yaml
+type: custom:jura-coffee-button-card
+product: espresso        # required: product name from the machine profile
+name: Morning espresso   # optional, defaults to the translated product name
+strength: 9              # optional -- the fields mirror the jura.brew service
+water_ml: 40
+temperature: 2           # profile item value (EF1091: 0 low, 1 normal, 2 high)
+confirm: false           # true = tap twice to brew
+# device_id: …           # pin a machine when you have several (editor picker)
+```
+
+- **Status at a glance**: the dot on the cup is green (ready), orange
+  (busy), red (needs attention -- the subtitle then shows the reason, e.g.
+  *Fill water*) or grey (offline). Tap the header for the status details.
+- **Brewing feedback**: the button shows *Brewing…* with the progress
+  percentage while the integration follows the brew, then *Enjoy!*; errors
+  appear on the tile.
+- **Not ready**: while the machine heats up, switches off, rinses or waits
+  for water, the button reads *Not ready* and the subtitle shows the
+  reason (e.g. *Heating up*, *Switching off*). The tile checks its own
+  drink, so a blocked milk drink does not disable an espresso tile, and it
+  is also blocked while a brew started elsewhere is running.
+- **Offline**: the button is disabled while the connectivity sensor is not
+  on, and the tile says why (*Machine not reachable*, also while Home
+  Assistant retries the setup). Pressing Brew on a machine that has just
+  gone away shows *Machine not reachable* on the tile.
+- Sizes to 2×2 in sections views (half a section) and to two rows in
+  masonry views. Override the accent colour with the theme variable
+  `jura-accent-color`.
+- English and German UI; product and temperature names use the
+  integration's translations.
+
+#### Jura Brew Card (`custom:jura-brew-card`)
+
+The full brew panel: status pill, Product picker, Strength / Water /
+Temperature sliders and a Brew button in one card, bound to the brew
+control entities.
 
 ```yaml
 type: custom:jura-brew-card

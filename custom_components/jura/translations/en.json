@@ -329,5 +329,22 @@
                 "name": "Setting {setting}"
             }
         }
+    },
+    "exceptions": {
+        "machine_unreachable": {
+            "message": "The coffee machine is not reachable. Is it switched on and connected to Wi-Fi?"
+        },
+        "brew_failed": {
+            "message": "Brewing failed: {error}"
+        },
+        "machine_not_ready": {
+            "message": "The coffee machine is not ready yet ({state}). Try again in a moment."
+        },
+        "brew_in_progress": {
+            "message": "A drink is already being brewed."
+        },
+        "brew_not_started": {
+            "message": "The coffee machine did not start brewing. Is it still heating up or showing a message?"
+        }
     }
 }

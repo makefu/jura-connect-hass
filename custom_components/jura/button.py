@@ -27,7 +27,7 @@ from jura_connect import (
 )
 
 from .const import DOMAIN
-from .coordinator import JuraCoordinator
+from .coordinator import HANDSHAKE_STATE_OFFLINE, JuraCoordinator
 from .entity import JuraEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -73,13 +73,21 @@ class JuraBrewButton(JuraEntity, ButtonEntity):
 
     @property
     def available(self) -> bool:
+        # Never brewable while the machine is unreachable -- regardless of
+        # "retain last values when offline", which keeps *readings* visible
+        # but must not leave an action pressable that cannot work.
+        if not self.coordinator.last_update_success:
+            return False
         product = self.coordinator.selected_product()
         if product is None:
             return False
         data = self.coordinator.data
-        # The machine refuses blocked products right now; go unavailable
-        # instead of erroring when the user presses brew.
-        return data is None or product.name not in data.blocked_products
+        if data is not None and data.handshake_state == HANDSHAKE_STATE_OFFLINE:
+            return False
+        # Not ready (heating up, rinsing, fill water, ...) or already brewing:
+        # a press could not brew and would only block the dongle session.
+        # The selected product blocked by the machine counts too.
+        return not self.coordinator.brew_pending and self.coordinator.brew_blocker(product.name) is None
 
     async def async_press(self) -> None:
         product = self.coordinator.selected_product()
@@ -92,4 +100,4 @@ class JuraBrewButton(JuraEntity, ButtonEntity):
             if value is not None:
                 overrides[kind] = value
         recipe = product.build_recipe_hex(overrides)
-        await self.coordinator.run_brew(recipe)
+        await self.coordinator.run_brew(recipe, product=product.name)

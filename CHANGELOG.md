@@ -4,6 +4,35 @@ All notable changes to this integration are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-11-03
+
+### Fixed
+
+- Integration hung after pressing Brew while the machine was heating up
+  (status stuck on `heating_up`, power-off not noticed, only a reload
+  helped). The machine ACKs a recipe while heating but never brews; the
+  integration then followed that phantom brew for the whole follow window
+  (120 s) holding the dongle's only session, and every further press
+  queued another one. Now:
+  - the Brew button is unavailable while the machine cannot brew (heating
+    up, rinsing, filling, *please wait*, water/grounds/tray/cover/error
+    alerts); brews are refused with *The coffee machine is not ready yet*
+    (`machine_not_ready`) without touching the machine;
+  - a second brew is refused (`brew_in_progress`) instead of queued, and
+    the button is unavailable while a brew runs;
+  - a brew without progress 30 s after the ACK ends with *The coffee
+    machine did not start brewing…* (`brew_not_started`) and frees the
+    session at once; a session still stuck after its time budget is
+    closed;
+  - while heating up / rinsing the machine is polled every 15 s, so the
+    button returns soon after it is ready.
+- Coffee Button: follows the integration's Brew button (*Not ready* plus
+  the reason, e.g. *Heating up*), also after a dashboard reload during a
+  brew; the new errors are shown in the user's language.
+- Deprecation warning about the device registry: the integration no longer
+  uses it; `jura/machines` takes the device id from the entity registry
+  and now also returns the `brew_button` entity.
+
 ## [1.5.0] - 2026-11-03
 
 ### Changed

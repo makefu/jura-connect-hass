@@ -4,6 +4,27 @@ All notable changes to this integration are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-11-03
+
+### Fixed
+
+- After switching the machine off, the Coffee Button tiles stayed
+  pressable for minutes while the status showed
+  `switch_off_delay_active`, and a press failed only after 30 s. That
+  status was not treated as "cannot brew", and `jura.brew` (used by the
+  cards) did not check which drinks the machine blocks; only the HA Brew
+  button did, for its own selected drink.
+  - `switch_off_delay_active` blocks brewing, ranks above the ready
+    states on the status sensor and shows as *Switching off* /
+    *Schaltet aus* on the cards.
+  - Every brew (button, card, `jura.brew`) checks the requested drink
+    against the machine's blocked products and is refused right away with
+    *not ready* plus the reason instead of being sent.
+  - The status sensor exposes `brew_ready`, `brew_blocker`, `brewing` and
+    `blocked_products`. The Coffee Button decides per drink from them
+    (the HA Brew button's availability reflects the brew panel's product,
+    not the tile's) and translates the common machine states itself.
+
 ## [1.5.1] - 2026-11-03
 
 ### Fixed

@@ -139,13 +139,15 @@ A compact 2×2 tile for one favourite drink: product, your personal
 parameters and a **Brew** button. Configure it entirely in the visual
 editor -- it lists the products of your machine profile and offers only
 the parameters (strength, water, temperature, grinder ratio, milk, milk
-foam) the chosen product really has, with the profile's ranges. Anything
-left empty brews with the product's factory default. Put several tiles
+foam) the chosen product really has, with the profile's ranges. The drink
+(*Getränk*) comes first and is always stored explicitly; a card without
+one shows *Choose a drink* and does not brew. Anything left empty among
+the parameters brews with the product's factory default. Put several tiles
 side by side for "my espresso", "her cappuccino", …
 
 ```yaml
 type: custom:jura-coffee-button-card
-product: espresso        # product name from the machine profile
+product: espresso        # required: product name from the machine profile
 name: Morning espresso   # optional, defaults to the translated product name
 strength: 9              # optional -- the fields mirror the jura.brew service
 water_ml: 40

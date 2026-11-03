@@ -50,6 +50,7 @@ const STRINGS = {
     loading: "Loading…",
     no_machine: "No JURA machine found",
     no_product: "Product not available",
+    choose_product: "Choose a drink in the card editor",
     default_recipe: "Factory recipe",
     strength: "Strength",
     water_ml: "Water",
@@ -77,6 +78,7 @@ const STRINGS = {
     loading: "Lädt…",
     no_machine: "Keine JURA-Maschine gefunden",
     no_product: "Getränk nicht verfügbar",
+    choose_product: "Getränk im Karteneditor wählen",
     default_recipe: "Standardrezept",
     strength: "Stärke",
     water_ml: "Wasser",
@@ -146,9 +148,11 @@ function resolveMachine(machines, config) {
   return machines[0];
 }
 
+// No `product` -> no product: the card must never guess a drink (it used to
+// fall back to the first profile product, so every unconfigured tile brewed
+// an espresso).
 function resolveProduct(machine, config) {
-  if (!machine || !machine.products.length) return undefined;
-  if (!config.product) return machine.products[0];
+  if (!machine || !machine.products.length || !config.product) return undefined;
   const wanted = `${config.product}`.toLowerCase();
   return machine.products.find((p) => p.name.toLowerCase() === wanted || (p.label || "").toLowerCase() === wanted);
 }
@@ -214,7 +218,15 @@ class JuraCoffeeButtonCard extends HTMLElement {
     return document.createElement(EDITOR_TYPE);
   }
 
-  static getStubConfig() {
+  // The card picker awaits this: start with an explicit drink so the saved
+  // YAML always names the product that will be brewed.
+  static async getStubConfig(hass) {
+    try {
+      const machine = resolveMachine(await fetchMachines(hass), {});
+      if (machine && machine.products.length) return { product: machine.products[0].name };
+    } catch (_err) {
+      // Integration not loaded yet: the editor fills the product in later.
+    }
     return {};
   }
 
@@ -464,7 +476,7 @@ class JuraCoffeeButtonCard extends HTMLElement {
       els.name.textContent = this._config.name || (this._config.product ? prettify(this._config.product) : "JURA");
       els.sub.textContent = this._loading
         ? t.loading
-        : this._loadError || (machine ? t.no_product : t.no_machine);
+        : this._loadError || (!machine ? t.no_machine : this._config.product ? t.no_product : t.choose_product);
       els.label.textContent = t.brew;
       els.button.disabled = true;
       return;
@@ -606,6 +618,25 @@ function fromFormData(data, machine) {
   return config;
 }
 
+// Home Assistant lazy-loads <ha-form>; a custom editor that creates it before
+// any built-in editor did gets an inert unknown element (an empty editor --
+// no drink picker). Loading a built-in card editor pulls ha-form in.
+let haFormPromise = null;
+function ensureHaForm() {
+  if (customElements.get("ha-form")) return Promise.resolve();
+  if (!haFormPromise) {
+    haFormPromise = (async () => {
+      const helpers = window.loadCardHelpers ? await window.loadCardHelpers() : undefined;
+      if (helpers) {
+        const card = await helpers.createCardElement({ type: "button", entity: "sun.sun" });
+        if (card && card.constructor.getConfigElement) await card.constructor.getConfigElement();
+      }
+      await customElements.whenDefined("ha-form");
+    })();
+  }
+  return haFormPromise;
+}
+
 class JuraCoffeeButtonCardEditor extends HTMLElement {
   setConfig(config) {
     this._config = { ...config };
@@ -616,25 +647,35 @@ class JuraCoffeeButtonCardEditor extends HTMLElement {
     const first = !this._hass;
     this._hass = hass;
     if (first) {
+      // Independent: the drink is written into the config even if ha-form
+      // never loads (the YAML editor still works then).
       fetchMachines(hass, true)
-        .then((machines) => {
-          this._machines = machines;
+        .then(
+          (machines) => {
+            this._machines = machines;
+          },
+          () => {
+            this._machines = [];
+          },
+        )
+        .then(() => {
           this._ensureProduct();
           this._render();
-        })
-        .catch(() => {
-          this._machines = [];
-          this._render();
         });
+      ensureHaForm()
+        .then(() => this._render())
+        .catch(() => {});
     }
     if (this._form) this._form.hass = hass;
   }
 
-  // Make a fresh card concrete: pick the first product of the machine.
+  // Make a card without a (known) drink concrete: write the machine's first
+  // product into the config, so the dropdown, the preview and the saved
+  // YAML all show the drink that will really be brewed.
   _ensureProduct() {
     const machine = resolveMachine(this._machines, this._config || {});
-    if (machine && !resolveProduct(machine, this._config)) {
-      this._emit({ ...this._config, product: machine.products.length ? machine.products[0].name : undefined });
+    if (machine && machine.products.length && !resolveProduct(machine, this._config)) {
+      this._emit({ ...this._config, product: machine.products[0].name });
     }
   }
 
@@ -645,7 +686,7 @@ class JuraCoffeeButtonCardEditor extends HTMLElement {
   }
 
   _render() {
-    if (!this._hass || !this._config || !this._machines) return;
+    if (!this._hass || !this._config || !this._machines || !customElements.get("ha-form")) return;
     const t = strings(this._hass);
     if (!this._form) {
       this._form = document.createElement("ha-form");
@@ -697,5 +738,14 @@ if (!customElements.get(CARD_TYPE)) {
 
 // Test hook (node --test); harmless in the browser.
 if (typeof module !== "undefined") {
-  module.exports = { resolveMachine, resolveProduct, buildServiceData, summaryText, editorSchema, fromFormData, toFormData };
+  module.exports = {
+    resolveMachine,
+    resolveProduct,
+    buildServiceData,
+    summaryText,
+    editorSchema,
+    fromFormData,
+    toFormData,
+    ensureHaForm,
+  };
 }

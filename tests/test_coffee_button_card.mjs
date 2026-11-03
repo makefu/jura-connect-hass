@@ -37,24 +37,36 @@ class FakeEl {
 class FakeHTMLElement {
   attachShadow() { this.shadowRoot ??= new FakeEl(); return this.shadowRoot; }
   dispatchEvent(ev) { (this.events ??= []).push(ev); }
+  appendChild(child) { (this.children ??= []).push(child); }
 }
 
-function load() {
+function load({ haForm = true, window = {} } = {}) {
   const defined = {};
   const module = { exports: {} };
+  const created = [];
   const sandbox = {
     HTMLElement: FakeHTMLElement,
     CustomEvent: class { constructor(type, init) { this.type = type; Object.assign(this, init); } },
-    document: { createElement: () => new FakeEl() },
-    customElements: { get: () => undefined, define: (n, cls) => { defined[n] = cls; } },
-    window: {},
+    document: { createElement: (tag) => { const el = new FakeEl(); el.tag = tag; created.push(el); return el; } },
+    customElements: {
+      get: (n) => (n === "ha-form" ? (haForm ? class {} : undefined) : defined[n]),
+      define: (n, cls) => { defined[n] = cls; },
+      whenDefined: async () => {},
+    },
+    window,
     console: { info() {}, warn() {} },
     setTimeout: () => 0,
     clearTimeout: () => {},
     module,
   };
   vm.runInNewContext(src, sandbox, { filename: "jura-coffee-button-card.js" });
-  return { Card: defined["jura-coffee-button-card"], Editor: defined["jura-coffee-button-card-editor"], api: module.exports, window: sandbox.window };
+  return {
+    Card: defined["jura-coffee-button-card"],
+    Editor: defined["jura-coffee-button-card-editor"],
+    api: module.exports,
+    window: sandbox.window,
+    created,
+  };
 }
 
 const ITEMS_1_10 = Array.from({ length: 10 }, (_, i) => ({ name: `${i + 1}`, value: i + 1 }));
@@ -241,4 +253,83 @@ test("editor round-trip: numbers back, cleared + foreign params dropped", () => 
     MACHINE,
   );
   assert.deepEqual({ ...config }, { product: "cappuccino", milk_foam_s: 20 });
+});
+
+// --- Regression: an unconfigured tile always brewed an espresso -------------
+// The card picker created `{}`; the card fell back to the first profile
+// product (espresso) and the editor -- with ha-form not yet loaded by Home
+// Assistant -- showed no drink picker, so the drink could not be changed.
+
+test("tile without a drink never guesses one (no espresso fallback)", async () => {
+  const { card, root, h } = await rendered({});
+  assert.equal(root.querySelector(".sub").textContent, "Getränk im Karteneditor wählen");
+  assert.equal(root.querySelector("button").disabled, true);
+  await card._onPress();
+  assert.equal(h.calls.length, 0);
+});
+
+test("chosen drink is the one that gets brewed", async () => {
+  const { card, root, h } = await rendered({ product: "cappuccino", milk_foam_s: 18 });
+  assert.equal(root.querySelector(".name").textContent, "Cappuccino");
+  assert.equal(root.querySelector(".sub").textContent, "Stärke 6 · Schaum 18 s");
+  await card._onPress();
+  assert.deepEqual({ ...h.calls[0][2] }, { config_entry_id: "e1", product: "cappuccino", milk_foam_s: 18 });
+});
+
+test("card picker stub names the drink explicitly", async () => {
+  const { Card } = load();
+  assert.deepEqual({ ...(await Card.getStubConfig(hass())) }, { product: "espresso" });
+  // Integration not answering: still a valid (empty) stub, no crash.
+  const broken = hass();
+  broken.callWS = async () => { throw new Error("unknown command"); };
+  const fresh = load().Card;
+  assert.deepEqual({ ...(await fresh.getStubConfig(broken)) }, {});
+});
+
+async function openEditor(config, opts) {
+  const env = load(opts);
+  const editor = new env.Editor();
+  const changes = [];
+  editor.dispatchEvent = (ev) => changes.push(ev.detail.config);
+  editor.hass = hass();
+  editor.setConfig(config);
+  await new Promise((r) => setImmediate(r));
+  return { ...env, editor, changes };
+}
+
+test("editor writes the drink into a config that has none", async () => {
+  const { changes, created } = await openEditor({});
+  assert.equal(changes.at(-1).product, "espresso");
+  // ...and renders the form with the drink picker first.
+  const form = created.find((el) => el.tag === "ha-form");
+  assert.ok(form, "ha-form rendered");
+  assert.equal(form.schema[0].name, "product");
+  assert.deepEqual([...form.schema[0].selector.select.options.map((o) => o.value)], ["espresso", "cappuccino"]);
+  assert.equal(form.data.product, "espresso");
+});
+
+test("editor drink change sticks and drops the old drink's parameters", async () => {
+  const { editor, changes, created } = await openEditor({ product: "espresso", water_ml: 40 });
+  const form = created.find((el) => el.tag === "ha-form");
+  form.listeners["value-changed"]({ detail: { value: { ...form.data, product: "cappuccino" } } });
+  assert.deepEqual({ ...changes.at(-1) }, { product: "cappuccino" });
+  editor.setConfig(changes.at(-1));
+  assert.equal(form.data.product, "cappuccino");
+});
+
+test("editor loads ha-form via the card helpers before rendering", async () => {
+  const loaded = [];
+  const window = {
+    loadCardHelpers: async () => ({
+      createCardElement: async (cfg) => {
+        loaded.push(cfg.type);
+        return { constructor: { getConfigElement: async () => loaded.push("editor") } };
+      },
+    }),
+  };
+  const { changes, created } = await openEditor({}, { haForm: false, window });
+  assert.deepEqual(loaded, ["button", "editor"]);
+  // The drink is saved even though ha-form is still unknown here.
+  assert.equal(changes.at(-1).product, "espresso");
+  assert.equal(created.filter((el) => el.tag === "ha-form").length, 0);
 });

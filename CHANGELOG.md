@@ -4,7 +4,35 @@ All notable changes to this integration are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.4.2] — 2026-11-03
+## [1.5.0] - 2026-11-03
+
+### Changed
+
+- The **Brew button** entity is unavailable while the machine is offline,
+  also with *Retain last values when offline* (which keeps readings, not
+  actions, alive). The Jura Brew Card and the Coffee Button follow.
+
+### Added
+
+- Brew failures are translated Home Assistant errors: an unreachable
+  machine raises *The coffee machine is not reachable…*
+  (`machine_unreachable`) and is marked offline at once instead of after
+  the poll tolerance; other failures raise *Brewing failed: …*
+  (`brew_failed`). English and German.
+- `jura/machines` also lists machines whose setup is still running or
+  being retried (new field `state`), with the product table from the
+  bundled profile. The Coffee Button shows the drink plus *Machine not
+  reachable, retrying…* instead of "no machine found", re-checks every 30 s
+  and turns live without a page reload.
+- Coffee Button: *Machine not reachable* on the tile when a brew finds the
+  machine gone.
+
+### Fixed
+
+- Jura Brew Card treated an `unavailable` connectivity sensor (integration
+  not loaded) as online.
+
+## [1.4.2] - 2026-11-03
 
 ### Fixed
 
@@ -31,7 +59,7 @@ version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Manifest dependency on `lovelace` (for the resource registration).
 
-## [1.4.1] — 2026-11-03
+## [1.4.1] - 2026-11-03
 
 ### Fixed
 
@@ -47,7 +75,7 @@ version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The card picker lists each Jura card only once, even when a module is
   evaluated twice (auto-load plus a leftover manual resource).
 
-## [1.4.0] — 2026-11-03
+## [1.4.0] - 2026-11-03
 
 ### Added
 

@@ -124,10 +124,17 @@ and `state` values.
 
 Both dashboard cards ship inside the integration and are **loaded
 automatically** -- no copying to `config/www/`, no manual dashboard
-resource. After installing (or updating) the integration and reloading the
-browser, they show up in the dashboard card picker. The integration serves
-them under `/jura_connect/` with a content hash in the URL, so a new card
-version reaches the browser without cache tricks.
+resource. The integration serves them under `/jura_connect/` and registers
+each one as a dashboard resource (*Settings → Dashboards → Resources*, the
+mechanism HACS uses), so the frontend loads them before it builds any card,
+also on slow wall displays and in the companion apps. The entries carry a
+content hash (`?v=…`) and are created, updated and de-duplicated
+automatically; with resources managed in YAML the integration falls back to
+extra script tags for both frontend builds. After installing (or updating)
+the integration, restart Home Assistant and reload the browser.
+
+The cards also run on older WebViews such as the Shelly Wall Display
+(legacy frontend build, no `color-mix()`, classic script loading).
 
 > Upgrading from a manual setup? Remove the old `/local/jura-brew-card.js`
 > dashboard resource (and the file in `config/www/`); the bundled copy is

@@ -40,6 +40,7 @@ tests/
   test_lovelace.py
   test_brew_card.mjs           # node --test tests/*.mjs (dashboard cards)
   test_coffee_button_card.mjs
+  test_card_compat.mjs         # legacy frontend / old WebView compatibility
   test_backends/
     test_base.py
     test_jura.py       # End-to-end with jura_connect.simulator.Simulator

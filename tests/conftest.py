@@ -570,7 +570,8 @@ class StaticPathConfig:
 
 
 def _add_extra_js_url(hass, url, es5=False):
-    hass.data.setdefault("frontend_extra_module_url", []).append(url)
+    key = "frontend_extra_js_url_es5" if es5 else "frontend_extra_module_url"
+    hass.data.setdefault(key, []).append(url)
 
 
 def _websocket_command(schema):

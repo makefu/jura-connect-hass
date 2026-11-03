@@ -37,25 +37,109 @@ def test_bundled_cards_ship_inside_the_component():
         assert (lovelace.WWW_DIR / name).is_file(), name
 
 
-async def test_setup_serves_and_autoloads_every_card():
+class FakeResources:
+    """Minimal ResourceStorageCollection (Lovelace resources, storage mode)."""
+
+    def __init__(self, items=None, loaded=False):
+        self.items = {item["id"]: dict(item) for item in items or []}
+        self.loaded = loaded
+        self.load_calls = 0
+        self._next = 100
+
+    async def async_load(self):
+        self.load_calls += 1
+
+    def async_items(self):
+        return list(self.items.values())
+
+    async def async_create_item(self, data):
+        self._next += 1
+        item = {"id": str(self._next), "type": data["res_type"], "url": data["url"]}
+        self.items[item["id"]] = item
+        return item
+
+    async def async_update_item(self, item_id, data):
+        self.items[item_id].update({"type": data["res_type"], "url": data["url"]})
+
+    async def async_delete_item(self, item_id):
+        del self.items[item_id]
+
+
+def _served(hass) -> dict[str, str]:
+    (configs,), _ = hass.http.async_register_static_paths.await_args
+    return {cfg.url_path: cfg.path for cfg in configs}
+
+
+async def test_setup_serves_every_card_with_cache_headers():
     hass = _hass()
     await lovelace.async_setup_lovelace(hass)
-
     (configs,), _ = hass.http.async_register_static_paths.await_args
-    served = {cfg.url_path: cfg.path for cfg in configs}
-    assert set(served) == {f"/jura_connect/{name}" for name in lovelace.CARD_FILES}
-    for url, path in served.items():
-        assert path.endswith(url.rsplit("/", 1)[1])
-
-    extra = hass.data["frontend_extra_module_url"]
-    assert len(extra) == len(lovelace.CARD_FILES)
-    # Content hash for cache busting: HA serves static files with long caching.
-    for url in extra:
-        base, _, version = url.partition("?v=")
-        assert base in served
-        assert len(version) == 8
-
+    assert {cfg.url_path for cfg in configs} == {f"/jura_connect/{name}" for name in lovelace.CARD_FILES}
+    for cfg in configs:
+        assert cfg.path.endswith(cfg.url_path.rsplit("/", 1)[1])
+        assert cfg.cache_headers is True
     assert "jura/machines" in hass.data["websocket_api"]
+
+
+async def test_cards_become_lovelace_resources_in_storage_mode():
+    """Regression (Shelly Wall Display): extra script tags are loaded without
+    the frontend waiting for them, so slow devices built the dashboard first
+    and showed "Custom element doesn't exist". Resources are loaded first."""
+    hass = _hass()
+    resources = FakeResources()
+    hass.data["lovelace"] = SimpleNamespace(resource_mode="storage", resources=resources)
+    await lovelace.async_setup_lovelace(hass)
+
+    assert resources.load_calls == 1
+    items = resources.async_items()
+    assert {item["url"].split("?")[0] for item in items} == set(_served(hass))
+    for item in items:
+        assert item["type"] == "module"
+        version = item["url"].partition("?v=")[2]
+        assert len(version) == 8  # content hash for cache busting
+    # No second load path -> no double evaluation.
+    assert "frontend_extra_module_url" not in hass.data
+    assert "frontend_extra_js_url_es5" not in hass.data
+
+
+async def test_resources_updated_in_place_and_duplicates_removed():
+    hass = _hass()
+    resources = FakeResources(
+        [
+            {"id": "1", "type": "module", "url": "/jura_connect/jura-coffee-button-card.js?v=old"},
+            # Manual workaround entry from the 1.4.x days, plus a duplicate.
+            {"id": "2", "type": "js", "url": "/jura_connect/jura-coffee-button-card.js"},
+            {"id": "3", "type": "module", "url": "/local/other-card.js"},
+        ],
+        loaded=True,
+    )
+    hass.data["lovelace"] = {"mode": "storage", "resources": resources}  # HA < 2025.2 layout
+    await lovelace.async_setup_lovelace(hass)
+
+    assert resources.load_calls == 0
+    urls = sorted(item["url"].split("?")[0] for item in resources.async_items())
+    assert urls == [
+        "/jura_connect/jura-brew-card.js",
+        "/jura_connect/jura-coffee-button-card.js",
+        "/local/other-card.js",
+    ]
+    coffee = resources.items["1"]
+    assert coffee["type"] == "module" and not coffee["url"].endswith("?v=old")
+    assert "2" not in resources.items
+    assert resources.items["3"]["url"] == "/local/other-card.js"  # foreign entries untouched
+
+
+async def test_yaml_resources_fall_back_to_extra_js_for_both_frontend_builds():
+    """Legacy frontend build (older WebViews) only loads the es5 list."""
+    hass = _hass()
+    hass.data["lovelace"] = SimpleNamespace(resource_mode="yaml", resources=SimpleNamespace(async_items=list))
+    await lovelace.async_setup_lovelace(hass)
+
+    served = _served(hass)
+    for key in ("frontend_extra_module_url", "frontend_extra_js_url_es5"):
+        urls = hass.data[key]
+        assert len(urls) == len(lovelace.CARD_FILES)
+        assert {url.split("?v=")[0] for url in urls} == set(served)
 
 
 async def test_setup_runs_once_for_several_machines():
@@ -71,6 +155,7 @@ async def test_setup_failure_does_not_break_the_integration():
     hass.http.async_register_static_paths = AsyncMock(side_effect=RuntimeError("boom"))
     await lovelace.async_setup_lovelace(hass)  # must not raise
     assert "frontend_extra_module_url" not in hass.data
+    assert "frontend_extra_js_url_es5" not in hass.data
 
 
 def test_products_payload_maps_params_to_brew_service_fields():

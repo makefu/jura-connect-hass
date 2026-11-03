@@ -6,9 +6,11 @@ in the dashboard card picker right after installing the integration -- no
 copying to ``config/www/`` and no manual *Resources* entry.
 
 * :func:`async_setup_lovelace` serves the card modules under
-  :data:`URL_BASE` and adds each one as a frontend extra module. The URL
-  carries a content hash (``?v=<md5>``) so browsers pick up a new card
-  version immediately despite Home Assistant's long-lived cache headers.
+  :data:`URL_BASE` and registers each one as a Lovelace dashboard resource
+  (storage mode), falling back to frontend extra modules for both frontend
+  builds when resources live in YAML. The URL carries a content hash
+  (``?v=<md5>``) so browsers pick up a new card version immediately despite
+  Home Assistant's long-lived cache headers.
 * ``jura/machines`` (websocket) lists the configured machines with their
   product table (per-product parameters, ranges and items), the device id
   and the status / connectivity / brew-progress entity ids. The card editor
@@ -71,9 +73,9 @@ def _file_hash(path: Path) -> str:
 async def async_setup_lovelace(hass: HomeAssistant) -> None:
     """Serve and auto-load the bundled cards; register the websocket API.
 
-    Idempotent: only the first config entry does the work. A failure here
-    never blocks the integration itself -- the entities and services keep
-    working, the user just has to add the card resource by hand.
+    Idempotent (runs from the domain's ``async_setup``). A failure here never
+    blocks the integration itself -- the entities and services keep working,
+    the user just has to add the card resource by hand.
     """
     if hass.data.get(DATA_LOVELACE):
         return
@@ -83,14 +85,64 @@ async def async_setup_lovelace(hass: HomeAssistant) -> None:
 
     try:
         files = [name for name in CARD_FILES if (WWW_DIR / name).is_file()]
+        if not files:
+            _LOGGER.warning("Jura dashboard cards missing in %s; is the integration installed completely?", WWW_DIR)
+            return
         hashes = {name: await hass.async_add_executor_job(_file_hash, WWW_DIR / name) for name in files}
+        # Cache headers on: the ?v=<hash> query changes with every card
+        # change, and slow clients (wall displays, phone apps) must not
+        # re-download the cards on every reload.
         await hass.http.async_register_static_paths(
             [StaticPathConfig(f"{URL_BASE}/{name}", str(WWW_DIR / name), True) for name in files]
         )
-        for name in files:
-            add_extra_js_url(hass, f"{URL_BASE}/{name}?v={hashes[name]}")
+        urls = {f"{URL_BASE}/{name}": f"{URL_BASE}/{name}?v={hashes[name]}" for name in files}
+        if await _async_register_resources(hass, urls):
+            return
+        # Resources managed in YAML: extra script tags for both frontend
+        # builds. Older WebViews (Shelly Wall Display, old tablets) get the
+        # legacy build, which only loads the es5 list.
+        for url in urls.values():
+            add_extra_js_url(hass, url)
+            add_extra_js_url(hass, url, es5=True)
     except Exception:
         _LOGGER.exception("Could not register the Jura dashboard cards; add them as a dashboard resource instead")
+
+
+async def _async_register_resources(hass: HomeAssistant, urls: dict[str, str]) -> bool:
+    """Create / update one Lovelace *resource* per card (storage mode).
+
+    Same mechanism HACS uses: the frontend loads dashboard resources before
+    it builds the cards, so slow devices do not hit "Custom element doesn't
+    exist" -- an extra script tag is loaded without the frontend waiting for
+    it. Entries are matched by path, so a stale ``?v=`` or a manually added
+    ``/jura_connect/...`` resource is updated in place and duplicates are
+    removed. Returns False when resources are managed in YAML.
+    """
+    data = hass.data.get("lovelace")
+    resources = getattr(data, "resources", None)
+    if resources is None and isinstance(data, dict):  # HA < 2025.2 kept a plain dict
+        resources = data.get("resources")
+    if resources is None or not hasattr(resources, "async_create_item"):
+        return False
+    if not getattr(resources, "loaded", True):
+        await resources.async_load()
+        resources.loaded = True
+
+    items = list(resources.async_items())
+    for base, url in urls.items():
+        ours = [item for item in items if str(item.get("url", "")).split("?", 1)[0] == base]
+        if not ours:
+            _LOGGER.info("Registering dashboard resource %s", url)
+            await resources.async_create_item({"res_type": "module", "url": url})
+            continue
+        first, *duplicates = ours
+        # Stored items carry the type as "type"; create/update take "res_type".
+        if first.get("url") != url or first.get("type") != "module":
+            _LOGGER.info("Updating dashboard resource to %s", url)
+            await resources.async_update_item(first["id"], {"res_type": "module", "url": url})
+        for item in duplicates:
+            await resources.async_delete_item(item["id"])
+    return True
 
 
 def _param_payload(param: Any) -> dict[str, Any]:

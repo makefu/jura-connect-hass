@@ -4,6 +4,33 @@ All notable changes to this integration are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] — 2026-11-03
+
+### Fixed
+
+- Cards missing on Shelly Wall Displays and other slow or older clients
+  ("Custom element doesn't exist"). Three causes, the same that hit the
+  DSB Vertretungsplan card:
+  - The cards were only extra script tags, which the frontend loads without
+    waiting; slow devices built the dashboard first. Each card is now a
+    Lovelace dashboard resource (storage mode), created, updated and
+    de-duplicated automatically by path, so a manual `/jura_connect/…`
+    workaround entry is merged. With YAML resources the extra script tags
+    remain, now for both frontend builds.
+  - Older WebViews get the legacy frontend build, which only loads
+    resources registered for it (`es5`); the cards were not.
+  - The legacy build runs cards as classic scripts in one global scope,
+    where both Jura cards' top-level names collided and the second card
+    failed to parse. Each card now has its own scope.
+- Coffee Button: plain colour fallbacks before every `color-mix()`, margins
+  instead of flex `gap`, no `inset` shorthand, so older WebViews show the
+  brown cup and correct spacing. Render errors stay inside the tile instead
+  of replacing it with Home Assistant's error card.
+
+### Changed
+
+- Manifest dependency on `lovelace` (for the resource registration).
+
 ## [1.4.1] — 2026-11-03
 
 ### Fixed

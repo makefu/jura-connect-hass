@@ -8,6 +8,7 @@
   "dependencies": [
     "frontend",
     "http",
+    "lovelace",
     "websocket_api"
   ],
   "documentation": "https://github.com/makefu/jura-connect-hass",
@@ -17,5 +18,5 @@
   "requirements": [
     "jura_connect>=0.14.0"
   ],
-  "version": "1.4.1"
+  "version": "1.4.2"
 }

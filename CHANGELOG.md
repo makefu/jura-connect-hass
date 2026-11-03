@@ -4,6 +4,22 @@ All notable changes to this integration are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] — 2026-11-03
+
+### Fixed
+
+- Dashboard cards were not loaded automatically ("Custom element not
+  found: jura-coffee-button-card" / "jura-brew-card"), although
+  `/jura_connect/*.js` was served. They were registered from the config
+  entry setup, i.e. only after the first machine poll (session quiet
+  period, or a setup retry while the dongle sleeps); frontends loaded in
+  the meantime never picked them up. The cards are now registered once in
+  the integration's `async_setup`, early in startup and without any
+  machine I/O. If you added `/jura_connect/…` as a dashboard resource as a
+  workaround, remove it again.
+- The card picker lists each Jura card only once, even when a module is
+  evaluated twice (auto-load plus a leftover manual resource).
+
 ## [1.4.0] — 2026-11-03
 
 ### Added

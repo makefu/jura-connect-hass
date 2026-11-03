@@ -215,8 +215,9 @@ async def test_async_setup_entry_prewarms_profile_off_event_loop(monkeypatch):
     # load_profile was invoked through the executor with the machine type.
     assert any(func is fake_load_profile for func, _ in executor_calls)
     assert seen["machine_type"] == "EF1091"
-    # Dashboard cards are served + auto-loaded without manual resources.
-    lovelace_setup.assert_awaited_once_with(hass)
+    # Dashboard cards are registered in async_setup, never per entry: that
+    # made them wait for the first machine poll.
+    lovelace_setup.assert_not_awaited()
 
 
 async def test_async_setup_entry_skips_prewarm_without_machine_type(monkeypatch):
@@ -256,3 +257,25 @@ async def test_async_setup_entry_skips_prewarm_without_machine_type(monkeypatch)
 
     assert await jura.async_setup_entry(hass, entry) is True
     assert called["n"] == 0
+
+
+async def test_async_setup_registers_dashboard_cards_before_any_entry(monkeypatch):
+    """Regression: cards registered from async_setup_entry waited for the first
+    machine poll, so frontends loaded meanwhile reported "Custom element not
+    found". async_setup runs once, before any entry and without machine I/O."""
+    from custom_components import jura
+
+    lovelace_setup = AsyncMock()
+    monkeypatch.setattr(jura, "async_setup_lovelace", lovelace_setup)
+    hass = MagicMock()
+
+    assert await jura.async_setup(hass, {}) is True
+    lovelace_setup.assert_awaited_once_with(hass)
+    hass.config_entries.async_forward_entry_setups.assert_not_called()
+
+
+def test_config_schema_is_config_entry_only():
+    """hassfest requires CONFIG_SCHEMA whenever async_setup exists."""
+    from custom_components import jura
+
+    assert jura.CONFIG_SCHEMA == {"config_entry_only": "jura"}

@@ -232,6 +232,10 @@ _make_module(
 # --- homeassistant.helpers ---
 _make_module("homeassistant.helpers")
 _make_module("homeassistant.helpers.typing", ConfigType=dict)
+_make_module(
+    "homeassistant.helpers.config_validation",
+    config_entry_only_config_schema=lambda domain: {"config_entry_only": domain},
+)
 
 
 # --- homeassistant.helpers.entity ---

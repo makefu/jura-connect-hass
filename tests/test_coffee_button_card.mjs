@@ -333,3 +333,9 @@ test("editor loads ha-form via the card helpers before rendering", async () => {
   assert.equal(changes.at(-1).product, "espresso");
   assert.equal(created.filter((el) => el.tag === "ha-form").length, 0);
 });
+
+test("card picker lists the card once even if a stale entry exists", () => {
+  const window = { customCards: [{ type: "jura-coffee-button-card", name: "Jura Coffee Button" }] };
+  load({ window });
+  assert.equal(window.customCards.filter((c) => c.type === "jura-coffee-button-card").length, 1);
+});

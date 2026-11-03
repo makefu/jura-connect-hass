@@ -541,7 +541,9 @@ class JuraBrewCard extends HTMLElement {
 if (!customElements.get("jura-brew-card")) {
   customElements.define("jura-brew-card", JuraBrewCard);
   window.customCards = window.customCards || [];
-  window.customCards.push({
+  // One picker entry, however often the module is evaluated (auto-loaded
+  // module plus a leftover manual dashboard resource or import()).
+  if (!window.customCards.some((c) => c.type === "jura-brew-card")) window.customCards.push({
     type: "jura-brew-card",
     name: "Jura Brew Card",
     description: "Brew a coffee from your JURA machine: product + profile-backed recipe controls + Brew button.",

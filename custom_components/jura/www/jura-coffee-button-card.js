@@ -725,7 +725,9 @@ if (!customElements.get(CARD_TYPE)) {
   customElements.define(CARD_TYPE, JuraCoffeeButtonCard);
   customElements.define(EDITOR_TYPE, JuraCoffeeButtonCardEditor);
   window.customCards = window.customCards || [];
-  window.customCards.push({
+  // One picker entry, however often the module is evaluated (auto-loaded
+  // module plus a leftover manual dashboard resource or import()).
+  if (!window.customCards.some((c) => c.type === CARD_TYPE)) window.customCards.push({
     type: CARD_TYPE,
     name: "Jura Coffee Button",
     description: "Your favourite JURA drink with personal parameters and a Brew button, in a compact 2x2 tile.",

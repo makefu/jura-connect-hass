@@ -11,7 +11,9 @@ try:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.const import Platform
     from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
+    from homeassistant.helpers import config_validation as cv
     from homeassistant.helpers import entity_registry as er
+    from homeassistant.helpers.typing import ConfigType
     from jura_connect import (
         KIND_COFFEE_STRENGTH,
         KIND_GRINDER_RATIO,
@@ -33,6 +35,9 @@ except ImportError:
 
 
 if _HAS_HOMEASSISTANT:
+    # Config-entry only; declared so hassfest accepts async_setup below.
+    CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
     PLATFORMS = [
         Platform.SENSOR,
         Platform.BINARY_SENSOR,
@@ -167,6 +172,19 @@ def _get_coordinator(hass: HomeAssistant, config_entry_id: str) -> JuraCoordinat
     return hass.data[DOMAIN][config_entry_id]
 
 
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the domain: serve + auto-load the bundled dashboard cards.
+
+    Runs once, early in startup and before any machine I/O. Registering the
+    cards from the config-entry setup instead made them depend on the first
+    machine poll (session quiet period, a sleeping dongle -> setup retry);
+    frontends served in the meantime never loaded them ("Custom element not
+    found: jura-coffee-button-card").
+    """
+    await async_setup_lovelace(hass)
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Jura from a config entry."""
     # Warm the jura_connect profile cache off the event loop. load_profile
@@ -191,9 +209,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     _register_services(hass)
-
-    # Serve + auto-load the bundled dashboard cards (once per HA instance).
-    await async_setup_lovelace(hass)
 
     # Flipping the hidden "retain when offline" advanced option re-reads
     # entry.options on the next entity state write, but a reload guarantees

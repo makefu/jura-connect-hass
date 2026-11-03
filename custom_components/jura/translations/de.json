@@ -257,5 +257,13 @@
                 "name": "Einstellung {setting}"
             }
         }
+    },
+    "exceptions": {
+        "machine_unreachable": {
+            "message": "Die Kaffeemaschine ist nicht erreichbar. Ist sie eingeschaltet und mit dem WLAN verbunden?"
+        },
+        "brew_failed": {
+            "message": "Brühen fehlgeschlagen: {error}"
+        }
     }
 }

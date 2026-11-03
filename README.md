@@ -84,6 +84,20 @@ for reachability. Turn this off per machine under Advanced settings
 (*Retain last values when offline*, default on); with it off, entities go
 `unavailable` on the second consecutive failed poll.
 
+Actions are the exception: the **Brew button** is unavailable whenever the
+machine is offline, retained values or not. A brew (button, card or
+`jura.brew`) that finds the machine unreachable fails with a clear,
+translated message (*The coffee machine is not reachable…*) and marks the
+machine offline immediately, without waiting for the next polls. Other
+brew failures are reported as *Brewing failed: …*.
+
+Home Assistant does not need the machine at startup: when it is off, the
+integration starts with the machine offline. The drinks and their
+parameter ranges come from the bundled machine profile, not from the
+machine, so the dashboard cards show your drink even while the machine is
+unreachable or its setup is being retried, with a hint instead of "no
+machine found", and turn live once it answers.
+
 The status sensor exposes `last_successful_update` (UTC ISO timestamp, or
 `null` before the first successful read) and `last_poll_success` (boolean).
 Both keys are always present, even before the first snapshot. Only a
@@ -169,7 +183,10 @@ confirm: false           # true = tap twice to brew
 - **Brewing feedback**: the button shows *Brewing…* with the progress
   percentage while the integration follows the brew, then *Enjoy!*; errors
   appear on the tile.
-- **Offline**: the button is disabled while the connectivity sensor is off.
+- **Offline**: the button is disabled while the connectivity sensor is not
+  on, and the tile says why (*Machine not reachable*, also while Home
+  Assistant retries the setup). Pressing Brew on a machine that has just
+  gone away shows *Machine not reachable* on the tile.
 - Sizes to 2×2 in sections views (half a section) and to two rows in
   masonry views. Override the accent colour with the theme variable
   `jura-accent-color`.

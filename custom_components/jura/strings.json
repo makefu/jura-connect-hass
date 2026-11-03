@@ -329,5 +329,13 @@
                 "name": "Setting {setting}"
             }
         }
+    },
+    "exceptions": {
+        "machine_unreachable": {
+            "message": "The coffee machine is not reachable. Is it switched on and connected to Wi-Fi?"
+        },
+        "brew_failed": {
+            "message": "Brewing failed: {error}"
+        }
     }
 }

@@ -149,3 +149,12 @@ def test_ef566_product_options_have_translations(catalog_name):
 
 def test_strings_and_en_mirror_match(strings, en):
     assert strings["entity"] == en["entity"]
+
+
+@pytest.mark.parametrize("name", ["strings.json", "translations/en.json", "translations/de.json"])
+def test_exception_messages_translated(name):
+    """Brew errors raised with translation_key must resolve in every language."""
+    exceptions = _load(name)["exceptions"]
+    assert set(exceptions) == {"machine_unreachable", "brew_failed"}
+    assert "{error}" in exceptions["brew_failed"]["message"]
+    assert "{" not in exceptions["machine_unreachable"]["message"]

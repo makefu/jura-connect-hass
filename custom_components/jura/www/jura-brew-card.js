@@ -405,10 +405,11 @@
       const statusState = ids.status ? hass.states[ids.status] : undefined;
       const btnState = ids.button ? hass.states[ids.button] : undefined;
 
-      // Offline if the connectivity sensor says so, or (no sensor) the brew
+      // Offline unless the connectivity sensor is "on" (off, or unavailable
+      // while the integration is not loaded), or (no sensor) the brew
       // button went unavailable.
       const offline =
-        (conn && conn.state === "off") ||
+        (conn && conn.state !== "on") ||
         (!conn && (!btnState || btnState.state === "unavailable"));
 
       let mood;

@@ -27,7 +27,7 @@ from jura_connect import (
 )
 
 from .const import DOMAIN
-from .coordinator import JuraCoordinator
+from .coordinator import HANDSHAKE_STATE_OFFLINE, JuraCoordinator
 from .entity import JuraEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -73,10 +73,17 @@ class JuraBrewButton(JuraEntity, ButtonEntity):
 
     @property
     def available(self) -> bool:
+        # Never brewable while the machine is unreachable -- regardless of
+        # "retain last values when offline", which keeps *readings* visible
+        # but must not leave an action pressable that cannot work.
+        if not self.coordinator.last_update_success:
+            return False
         product = self.coordinator.selected_product()
         if product is None:
             return False
         data = self.coordinator.data
+        if data is not None and data.handshake_state == HANDSHAKE_STATE_OFFLINE:
+            return False
         # The machine refuses blocked products right now; go unavailable
         # instead of erroring when the user presses brew.
         return data is None or product.name not in data.blocked_products

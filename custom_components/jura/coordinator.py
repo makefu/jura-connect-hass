@@ -14,7 +14,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from jura_connect import MachineProfile, ProductDef, load_profile
@@ -437,20 +437,50 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
         ``follow_seconds``) because the ``@TV:`` stream needs the session
         open. Defaults to the ``brew_follow_seconds`` entry option. Polls
         colliding with it are not treated as an outage.
+
+        Failures surface as translated ``HomeAssistantError`` exceptions
+        (``machine_unreachable`` / ``brew_failed``) instead of raw backend
+        text. An unreachable machine is marked OFFLINE right away -- the
+        connectivity sensor and the brew button follow without waiting for
+        the polls of the outage tolerance.
         """
         if follow_seconds is None:
             follow_seconds = self.brew_follow_seconds
-        async with self._machine_session():
-            self._follow_brew_active = True
-            try:
-                result = await self.backend.follow_brew(recipe, follow_seconds=follow_seconds)
-            finally:
-                self._follow_brew_active = False
+        try:
+            async with self._machine_session():
+                self._follow_brew_active = True
+                try:
+                    result = await self.backend.follow_brew(recipe, follow_seconds=follow_seconds)
+                finally:
+                    self._follow_brew_active = False
+        except JuraAuthError as err:
+            raise ConfigEntryAuthFailed(f"authentication failed: {err}") from err
+        except JuraBackendError as err:
+            if _is_offline_error(err):
+                self.mark_offline(err)
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="machine_unreachable",
+                ) from err
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="brew_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
         await self.async_request_refresh()
         frames = result.get("frames") or []
         if self.data is not None:
             self.async_set_updated_data(dataclasses.replace(self.data, progress=frames[-1] if frames else None))
         return result
+
+    def mark_offline(self, err: BaseException) -> None:
+        """A command proved the machine unreachable: surface OFFLINE now.
+
+        Skips the poll tolerance (meant for polls racing our own sessions);
+        the next successful poll brings the machine back as usual.
+        """
+        self._consecutive_offline = max(self._consecutive_offline, OFFLINE_TOLERANCE - 1)
+        self.async_set_updated_data(self._handle_offline_poll(err))
 
     async def write_setting(self, name: str, value: str) -> None:
         """Write a machine setting (validated by the profile) and reflect it

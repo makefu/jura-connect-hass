@@ -205,3 +205,15 @@ test("online machine renders status pill, not Offline", () => {
   assert.ok(pill._cls.has("ready"));
   assert.equal(brew.disabled, false);
 });
+
+test("connectivity unavailable (integration not loaded) renders Offline", () => {
+  const Card = loadCard();
+  const states = {
+    ...driftedStates,
+    "binary_sensor.kaffeebert_connectivity": { entity_id: "binary_sensor.kaffeebert_connectivity", state: "unavailable", attributes: {} },
+    "button.kuche_kaffeebert_brew": { entity_id: "button.kuche_kaffeebert_brew", state: "unknown", attributes: {} },
+  };
+  const { pillText, brew } = pillAndButton(render(Card, states));
+  assert.equal(pillText.textContent, "Offline");
+  assert.equal(brew.disabled, true);
+});

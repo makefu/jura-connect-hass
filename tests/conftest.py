@@ -215,7 +215,11 @@ _make_module(
 
 # --- homeassistant.exceptions ---
 class HomeAssistantError(Exception):
-    pass
+    def __init__(self, *args, translation_domain=None, translation_key=None, translation_placeholders=None):
+        super().__init__(*args)
+        self.translation_domain = translation_domain
+        self.translation_key = translation_key
+        self.translation_placeholders = translation_placeholders
 
 
 class ConfigEntryAuthFailed(HomeAssistantError):
@@ -592,6 +596,7 @@ _make_module("homeassistant.components.frontend", add_extra_js_url=_add_extra_js
 _make_module(
     "homeassistant.components.websocket_api",
     websocket_command=_websocket_command,
+    async_response=lambda func: func,
     async_register_command=_ws_register_command,
 )
 

@@ -55,6 +55,9 @@
       no_machine: "No JURA machine found",
       no_product: "Product not available",
       choose_product: "Choose a drink in the card editor",
+      unreachable: "Machine not reachable",
+      setup_retry: "Machine not reachable, retrying…",
+      not_loaded: "Integration not loaded",
       default_recipe: "Factory recipe",
       strength: "Strength",
       water_ml: "Water",
@@ -83,6 +86,9 @@
       no_machine: "Keine JURA-Maschine gefunden",
       no_product: "Getränk nicht verfügbar",
       choose_product: "Getränk im Karteneditor wählen",
+      unreachable: "Maschine nicht erreichbar",
+      setup_retry: "Maschine nicht erreichbar, neuer Versuch läuft…",
+      not_loaded: "Integration nicht geladen",
       default_recipe: "Standardrezept",
       strength: "Stärke",
       water_ml: "Wasser",
@@ -270,6 +276,16 @@
         .then((machines) => {
           this._machines = machines;
           this._loadError = undefined;
+          // Machine still starting up (setup retry): look again shortly, so
+          // the tile turns live without a page reload once it is reachable.
+          const machine = resolveMachine(machines, this._config || {});
+          if (machine && machine.state && machine.state !== "loaded") {
+            clearTimeout(this._retryTimer);
+            this._retryTimer = setTimeout(() => {
+              fetchMachines(this._hass, true).catch(() => {});
+              this._load();
+            }, 30000);
+          }
         })
         .catch((err) => {
           this._loadError = (err && err.message) || `${err}`;
@@ -434,6 +450,7 @@
     }
 
     _isOffline(machine) {
+      if (machine.state && machine.state !== "loaded") return true;
       const hass = this._hass;
       const conn = machine.entities.connectivity && hass.states[machine.entities.connectivity];
       if (conn) return conn.state !== "on";
@@ -462,7 +479,12 @@
         await this._hass.callService("jura", "brew", buildServiceData(this._config, machine, product));
         this._setPhase("done", 2500);
       } catch (err) {
-        this._error = (err && err.message) || `${err}`;
+        // The integration raises translation_key "machine_unreachable" and
+        // marks the machine offline at once; show it in the user's language.
+        const key = err && (err.translation_key || (err.error && err.error.translation_key));
+        this._error = key === "machine_unreachable"
+          ? strings(this._hass).unreachable
+          : (err && err.message) || `${err}`;
         this._setPhase("error", 4000);
       }
     }
@@ -521,6 +543,9 @@
         els.sub.classList.add("attention");
       } else if (phase === "error" && this._error) {
         els.sub.textContent = this._error;
+        els.sub.classList.add("attention");
+      } else if (machine.state && machine.state !== "loaded") {
+        els.sub.textContent = machine.state === "setup_retry" ? t.setup_retry : t.not_loaded;
         els.sub.classList.add("attention");
       } else {
         els.sub.textContent = summaryText(hass, this._config, product);

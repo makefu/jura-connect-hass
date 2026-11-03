@@ -14,7 +14,7 @@ from homeassistant.helpers import entity_registry as er
 from jura_connect import load_profile
 
 from custom_components.jura import lovelace
-from custom_components.jura.const import CONF_CONN_ID, DOMAIN
+from custom_components.jura.const import CONF_CONN_ID, CONF_MACHINE_TYPE, DOMAIN
 
 _PROFILE = load_profile("EF1091")
 
@@ -200,10 +200,34 @@ def test_products_payload_without_profile_is_empty():
     assert lovelace.products_payload(None) == []
 
 
-def test_ws_machines_lists_machines_with_device_and_entities():
+def _entry(entry_id="e1", title="Kaffeebert", state="loaded", machine_type="EF1091"):
+    return SimpleNamespace(
+        entry_id=entry_id,
+        title=title,
+        state=SimpleNamespace(value=state),
+        data={CONF_CONN_ID: "Abc-123", CONF_MACHINE_TYPE: machine_type},
+    )
+
+
+def _ws_hass(entries, coordinators):
     hass = MagicMock()
-    entry = SimpleNamespace(entry_id="e1", title="Kaffeebert", data={CONF_CONN_ID: "Abc-123"})
-    hass.data = {DOMAIN: {"e1": SimpleNamespace(config_entry=entry, brew_profile=_PROFILE)}}
+    hass.data = {DOMAIN: coordinators}
+    hass.async_add_executor_job = _executor
+    hass.config_entries.async_entries = lambda domain: entries if domain == DOMAIN else []
+    return hass
+
+
+async def _ws_result(hass):
+    connection = MagicMock()
+    await lovelace.ws_machines(hass, connection, {"id": 7, "type": "jura/machines"})
+    msg_id, result = connection.send_result.call_args.args
+    assert msg_id == 7
+    return result["machines"]
+
+
+async def test_ws_machines_lists_machines_with_device_and_entities():
+    entry = _entry()
+    hass = _ws_hass([entry], {"e1": SimpleNamespace(config_entry=entry, brew_profile=_PROFILE)})
 
     dr.async_get(hass).add({(DOMAIN, "e1")}, "dev-1")
     registry = er.async_get(hass)
@@ -211,14 +235,10 @@ def test_ws_machines_lists_machines_with_device_and_entities():
     registry.add("binary_sensor.kaffeebert_connectivity", "e1", unique_id=f"{DOMAIN}_abc_123_connectivity")
     registry.add("sensor.kaffeebert_brew_progress", "e1", unique_id=f"{DOMAIN}_abc_123_brew_progress")
 
-    connection = MagicMock()
-    lovelace.ws_machines(hass, connection, {"id": 7, "type": "jura/machines"})
-
-    msg_id, result = connection.send_result.call_args.args
-    assert msg_id == 7
-    (machine,) = result["machines"]
+    (machine,) = await _ws_result(hass)
     assert machine["entry_id"] == "e1"
     assert machine["title"] == "Kaffeebert"
+    assert machine["state"] == "loaded"
     assert machine["device_id"] == "dev-1"
     assert machine["entities"] == {
         "status": "sensor.kaffeebert_status",
@@ -228,9 +248,21 @@ def test_ws_machines_lists_machines_with_device_and_entities():
     assert machine["products"] == lovelace.products_payload(_PROFILE)
 
 
-def test_ws_machines_without_machines():
-    hass = MagicMock()
-    hass.data = {}
-    connection = MagicMock()
-    lovelace.ws_machines(hass, connection, {"id": 1, "type": "jura/machines"})
-    connection.send_result.assert_called_once_with(1, {"machines": []})
+async def test_ws_machines_lists_machine_whose_setup_is_retrying():
+    """Machine unreachable at HA start (setup retry): cards still get the
+    machine and its drinks -- from the bundled profile, not the machine --
+    plus the state, instead of "no machine found"."""
+    hass = _ws_hass([_entry(state="setup_retry")], {})
+    (machine,) = await _ws_result(hass)
+    assert machine["state"] == "setup_retry"
+    assert machine["products"] == lovelace.products_payload(_PROFILE)
+
+
+async def test_ws_machines_without_machine_type_has_no_products():
+    hass = _ws_hass([_entry(state="setup_error", machine_type=None)], {})
+    (machine,) = await _ws_result(hass)
+    assert machine["products"] == []
+
+
+async def test_ws_machines_without_machines():
+    assert await _ws_result(_ws_hass([], {})) == []

@@ -339,3 +339,45 @@ test("card picker lists the card once even if a stale entry exists", () => {
   load({ window });
   assert.equal(window.customCards.filter((c) => c.type === "jura-coffee-button-card").length, 1);
 });
+
+// --- Offline handling --------------------------------------------------------
+
+test("connectivity unavailable disables brewing", async () => {
+  const h = hass({ "binary_sensor.kaffeebert_connectivity": { state: "unavailable", attributes: {} } });
+  const { card, root } = await rendered({ product: "espresso" }, h);
+  assert.equal(root.querySelector("button").disabled, true);
+  await card._onPress();
+  assert.equal(h.calls.length, 0);
+});
+
+test("machine unreachable at HA start (setup retry): drink shown, clear hint, no brew", async () => {
+  const retrying = { ...MACHINE, state: "setup_retry" };
+  // Entities exist in the registry but are unavailable while setup retries.
+  const h = hass(
+    {
+      "binary_sensor.kaffeebert_connectivity": { state: "unavailable", attributes: {} },
+      "sensor.kaffeebert_status": { state: "unavailable", attributes: {} },
+    },
+    { machines: [retrying] },
+  );
+  const { card, root } = await rendered({ product: "espresso" }, h);
+  assert.equal(root.querySelector(".name").textContent, "Espresso");
+  assert.equal(root.querySelector(".sub").textContent, "Maschine nicht erreichbar, neuer Versuch läuft…");
+  assert.equal(root.querySelector(".label").textContent, "Offline");
+  assert.equal(root.querySelector("button").disabled, true);
+  await card._onPress();
+  assert.equal(h.calls.length, 0);
+});
+
+test("brew on a machine that just went away shows a translated hint", async () => {
+  const h = hass();
+  h.callService = async () => {
+    const err = new Error("The coffee machine is not reachable. Is it switched on and connected to Wi-Fi?");
+    err.translation_key = "machine_unreachable";
+    throw err;
+  };
+  const { card, root } = await rendered({ product: "espresso" }, h);
+  await card._onPress();
+  assert.equal(root.querySelector(".label").textContent, "Fehler");
+  assert.equal(root.querySelector(".sub").textContent, "Maschine nicht erreichbar");
+});

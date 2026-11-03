@@ -1,4 +1,4 @@
-// Regression tests for www/jura-brew-card.js, run with `node --test tests/`.
+// Regression tests for custom_components/jura/www/jura-brew-card.js, run with `node --test tests/`.
 // The card is a plain browser script, so it is evaluated in a vm with a
 // minimal DOM stub; no bundler or npm deps.
 //
@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
-const src = readFileSync(new URL("../www/jura-brew-card.js", import.meta.url), "utf8");
+const src = readFileSync(new URL("../custom_components/jura/www/jura-brew-card.js", import.meta.url), "utf8");
 
 class FakeEl {
   constructor() {

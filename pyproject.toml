@@ -14,7 +14,7 @@ dependencies = [
 include = ["custom_components*"]
 
 [tool.setuptools.package-data]
-"custom_components.jura" = ["manifest.json", "services.yaml", "strings.json", "translations/*.json"]
+"custom_components.jura" = ["manifest.json", "services.yaml", "strings.json", "translations/*.json", "www/*.js"]
 
 [project.scripts]
 jura-connect-ha = "custom_components.jura.cli:main"

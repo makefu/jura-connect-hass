@@ -25,6 +25,7 @@ try:
 
     from .const import CONF_MACHINE_TYPE, DOMAIN
     from .coordinator import JuraCoordinator
+    from .lovelace import async_setup_lovelace
 
     _HAS_HOMEASSISTANT = True
 except ImportError:
@@ -190,6 +191,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     _register_services(hass)
+
+    # Serve + auto-load the bundled dashboard cards (once per HA instance).
+    await async_setup_lovelace(hass)
 
     # Flipping the hidden "retain when offline" advanced option re-reads
     # entry.options on the next entity state write, but a reload guarantees

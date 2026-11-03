@@ -147,7 +147,7 @@
               }
               ''
                 cd ${self}
-                node --test tests/test_brew_card.mjs
+                node --test tests/*.mjs
                 touch $out
               '';
         }

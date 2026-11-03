@@ -250,7 +250,30 @@ class DeviceEntryType:
     SERVICE = "service"
 
 
-_make_module("homeassistant.helpers.device_registry", DeviceEntryType=DeviceEntryType)
+class _DeviceEntry:
+    def __init__(self, device_id: str):
+        self.id = device_id
+
+
+class _DeviceRegistry:
+    def __init__(self):
+        self._devices: dict[frozenset, _DeviceEntry] = {}
+
+    def async_get_device(self, identifiers=None, connections=None) -> _DeviceEntry | None:
+        return self._devices.get(frozenset(identifiers or ()))
+
+    def add(self, identifiers, device_id: str) -> None:
+        self._devices[frozenset(identifiers)] = _DeviceEntry(device_id)
+
+
+_device_registry_instance = _DeviceRegistry()
+
+
+_make_module(
+    "homeassistant.helpers.device_registry",
+    DeviceEntryType=DeviceEntryType,
+    async_get=lambda hass: _device_registry_instance,
+)
 
 
 # --- homeassistant.helpers.entity_registry ---
@@ -262,12 +285,18 @@ class _EntityRegistryEntry:
 class _EntityRegistry:
     def __init__(self):
         self._entries: dict[str, _EntityRegistryEntry] = {}
+        self._unique_ids: dict[tuple[str, str], str] = {}
 
     def async_get(self, entity_id: str) -> _EntityRegistryEntry | None:
         return self._entries.get(entity_id)
 
-    def add(self, entity_id: str, config_entry_id: str | None = None) -> None:
+    def add(self, entity_id: str, config_entry_id: str | None = None, unique_id: str | None = None) -> None:
         self._entries[entity_id] = _EntityRegistryEntry(config_entry_id)
+        if unique_id is not None:
+            self._unique_ids[(entity_id.split(".", 1)[0], unique_id)] = entity_id
+
+    def async_get_entity_id(self, domain: str, platform: str, unique_id: str) -> str | None:
+        return self._unique_ids.get((domain, unique_id))
 
 
 _entity_registry_instance = _EntityRegistry()
@@ -526,6 +555,40 @@ class ButtonEntity:
 
 
 _make_module("homeassistant.components.button", ButtonEntity=ButtonEntity)
+
+
+# --- dashboard plumbing: http / frontend / websocket_api ---
+class StaticPathConfig:
+    def __init__(self, url_path, path, cache_headers=True):
+        self.url_path = url_path
+        self.path = path
+        self.cache_headers = cache_headers
+
+
+def _add_extra_js_url(hass, url, es5=False):
+    hass.data.setdefault("frontend_extra_module_url", []).append(url)
+
+
+def _websocket_command(schema):
+    def decorator(func):
+        func.ws_type = next(iter(schema.values()))
+        return func
+
+    return decorator
+
+
+def _ws_register_command(hass, handler):
+    hass.data.setdefault("websocket_api", {})[handler.ws_type] = handler
+
+
+_make_module("homeassistant.components")
+_make_module("homeassistant.components.http", StaticPathConfig=StaticPathConfig)
+_make_module("homeassistant.components.frontend", add_extra_js_url=_add_extra_js_url)
+_make_module(
+    "homeassistant.components.websocket_api",
+    websocket_command=_websocket_command,
+    async_register_command=_ws_register_command,
+)
 
 
 # --- homeassistant.components.binary_sensor ---

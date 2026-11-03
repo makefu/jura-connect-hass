@@ -5,7 +5,11 @@
     "@makefu"
   ],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": [
+    "frontend",
+    "http",
+    "websocket_api"
+  ],
   "documentation": "https://github.com/makefu/jura-connect-hass",
   "integration_type": "device",
   "iot_class": "local_polling",

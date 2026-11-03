@@ -19,6 +19,10 @@ custom_components/jura/
   select.py            # Writable setting entities (switch/combobox/item_slider)
   number.py            # Writable setting entities (step_slider — hardness etc.)
   serializers.py       # MachineSnapshot -> JSON-safe dict helpers
+  lovelace.py          # Serves + auto-loads the bundled cards, jura/machines websocket command
+  www/
+    jura-brew-card.js           # Full brew panel card
+    jura-coffee-button-card.js  # 2x2 favourite-drink card + visual editor
   cli.py               # Standalone CLI (just --version + discover)
   services.yaml        # HA service definitions
   manifest.json        # HA component metadata (version is source of truth)
@@ -33,6 +37,9 @@ tests/
   test_config_flow.py
   test_services.py
   test_serializers.py
+  test_lovelace.py
+  test_brew_card.mjs           # node --test tests/*.mjs (dashboard cards)
+  test_coffee_button_card.mjs
   test_backends/
     test_base.py
     test_jura.py       # End-to-end with jura_connect.simulator.Simulator

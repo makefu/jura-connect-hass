@@ -196,6 +196,8 @@ async def test_async_setup_entry_prewarms_profile_off_event_loop(monkeypatch):
     coordinator.async_load_brew_prefs = AsyncMock()
     monkeypatch.setattr(jura, "JuraCoordinator", lambda *a, **k: coordinator)
     monkeypatch.setattr(jura, "_register_services", lambda _hass: None)
+    lovelace_setup = AsyncMock()
+    monkeypatch.setattr(jura, "async_setup_lovelace", lovelace_setup)
 
     seen: dict = {}
 
@@ -213,6 +215,8 @@ async def test_async_setup_entry_prewarms_profile_off_event_loop(monkeypatch):
     # load_profile was invoked through the executor with the machine type.
     assert any(func is fake_load_profile for func, _ in executor_calls)
     assert seen["machine_type"] == "EF1091"
+    # Dashboard cards are served + auto-loaded without manual resources.
+    lovelace_setup.assert_awaited_once_with(hass)
 
 
 async def test_async_setup_entry_skips_prewarm_without_machine_type(monkeypatch):
@@ -235,6 +239,8 @@ async def test_async_setup_entry_skips_prewarm_without_machine_type(monkeypatch)
     coordinator.async_load_brew_prefs = AsyncMock()
     monkeypatch.setattr(jura, "JuraCoordinator", lambda *a, **k: coordinator)
     monkeypatch.setattr(jura, "_register_services", lambda _hass: None)
+    lovelace_setup = AsyncMock()
+    monkeypatch.setattr(jura, "async_setup_lovelace", lovelace_setup)
 
     called = {"n": 0}
 

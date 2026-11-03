@@ -4,6 +4,31 @@ All notable changes to this integration are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Jura Coffee Button** dashboard card (`custom:jura-coffee-button-card`):
+  a 2×2 tile for one favourite drink with personal parameters and a Brew
+  button. A visual editor lists the machine's products and offers only the
+  chosen product's parameters with their profile ranges; empty fields brew
+  the factory default. Shows machine status, brew progress and errors on
+  the tile, disables brewing while offline, optional tap-twice
+  confirmation, English and German UI.
+- Websocket command `jura/machines`: every configured machine with its
+  device id, status / connectivity / brew-progress entity ids and the
+  product table (parameters mapped to `jura.brew` fields, with ranges,
+  items and defaults).
+
+### Changed
+
+- The dashboard cards ship inside the integration
+  (`custom_components/jura/www/`) and are registered automatically as
+  frontend modules under `/jura_connect/…?v=<hash>`. Copying
+  `jura-brew-card.js` to `config/www/` and adding a dashboard resource is no
+  longer needed; remove an old manual `/local/jura-brew-card.js` resource
+  when upgrading. Requires Home Assistant 2024.7 or newer.
+
 ## [1.3.0] — 2026-11-01
 
 ### Added

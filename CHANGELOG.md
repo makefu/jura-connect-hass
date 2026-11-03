@@ -4,7 +4,7 @@ All notable changes to this integration are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.4.0] — 2026-11-03
 
 ### Added
 
@@ -14,7 +14,11 @@ version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   chosen product's parameters with their profile ranges; empty fields brew
   the factory default. Shows machine status, brew progress and errors on
   the tile, disables brewing while offline, optional tap-twice
-  confirmation, English and German UI.
+  confirmation, English and German UI. The drink is always explicit: the
+  card picker and the editor write `product` into the card config, and a
+  card without one asks for a drink instead of brewing the profile's first
+  product. The editor loads Home Assistant's lazy `ha-form` itself, so the
+  drink picker is there even when no built-in editor was opened before.
 - Websocket command `jura/machines`: every configured machine with its
   device id, status / connectivity / brew-progress entity ids and the
   product table (parameters mapped to `jura.brew` fields, with ranges,

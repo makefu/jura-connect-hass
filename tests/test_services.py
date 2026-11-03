@@ -124,7 +124,7 @@ async def test_brew_handler_follows_brew_progress():
     call.data = {"config_entry_id": "test_entry_id", "recipe": "01"}
     result = await handler(call)
 
-    coordinator.run_brew.assert_awaited_once_with("01")
+    coordinator.run_brew.assert_awaited_once_with("01", product=None)
     assert result == {"ack": "@tp", "frames": []}
 
 

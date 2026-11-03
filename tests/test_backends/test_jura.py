@@ -144,6 +144,8 @@ async def test_fetch_surfaces_blocked_products(running_simulator):
     assert "espresso" in snapshot.blocked_products  # kind C
     assert "cappuccino" in snapshot.blocked_products  # kind CM also blocked by no_beans
     assert "milk_foam" not in snapshot.blocked_products  # kind M stays brewable
+    # The reason travels along, for "not ready (no beans)" messages.
+    assert "no_beans" in snapshot.blocking_alerts
 
 
 async def test_follow_brew_progress():

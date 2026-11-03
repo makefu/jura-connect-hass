@@ -449,3 +449,58 @@ for (const [key, text] of [
     assert.equal(root.querySelector(".sub").textContent, text);
   });
 }
+
+// --- Switching off / per-drink readiness ------------------------------------
+// Regression: after power-off the status stayed switch_off_delay_active for
+// minutes; the tiles stayed pressable and only failed after a while.
+
+function statusWith(state, attrs) {
+  return {
+    "sensor.kaffeebert_status": {
+      state,
+      attributes: { brew_ready: true, brew_blocker: null, brewing: false, blocked_products: [], ...attrs },
+    },
+  };
+}
+
+test("switching off: not ready, says so in German, busy dot, never brews", async () => {
+  const h = hass(statusWith("switch_off_delay_active", { brew_ready: false, brew_blocker: "switch_off_delay_active" }));
+  const { card, root } = await rendered({ product: "espresso" }, h);
+  assert.equal(root.querySelector(".label").textContent, "Nicht bereit");
+  assert.equal(root.querySelector(".sub").textContent, "Schaltet aus");
+  assert.match(root.querySelector(".dot").className, /busy/);
+  assert.equal(root.querySelector("button").disabled, true);
+  await card._onPress();
+  assert.equal(h.calls.length, 0);
+});
+
+test("a drink the machine blocks is disabled, other drinks still brew", async () => {
+  const states = statusWith("cappu_clean_alert", { blocked_products: ["cappuccino"] });
+  const cappu = await rendered({ product: "cappuccino" }, hass(states));
+  assert.equal(cappu.root.querySelector("button").disabled, true);
+  await cappu.card._onPress();
+  assert.equal(cappu.h.calls.length, 0);
+
+  const espresso = await rendered({ product: "espresso" }, hass(states));
+  assert.equal(espresso.root.querySelector("button").disabled, false);
+  await espresso.card._onPress();
+  assert.equal(espresso.h.calls.length, 1);
+});
+
+test("the brew panel's own product does not decide for this tile", async () => {
+  // HA Brew button unavailable because the panel's product is blocked;
+  // the status sensor says this tile's drink can be brewed.
+  const h = hass(
+    { ...statusWith("coffee_ready", {}), "button.kaffeebert_brew": { state: "unavailable", attributes: {} } },
+    { machines: [WITH_BUTTON] },
+  );
+  const { root } = await rendered({ product: "espresso" }, h);
+  assert.equal(root.querySelector("button").disabled, false);
+  assert.equal(root.querySelector(".label").textContent, "Brühen");
+});
+
+test("a brew running elsewhere blocks via the status sensor too", async () => {
+  const h = hass(statusWith("coffee_ready", { brew_ready: false, brewing: true }));
+  const { root } = await rendered({ product: "espresso" }, h);
+  assert.equal(root.querySelector("button").disabled, true);
+});

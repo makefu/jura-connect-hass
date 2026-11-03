@@ -230,3 +230,104 @@ async def test_polls_faster_while_heating_up(sample_snapshot, ready_snapshot):
     coordinator.backend.fetch = AsyncMock(return_value=ready_snapshot)
     await coordinator._async_update_data()
     assert coordinator.update_interval == timedelta(seconds=DEFAULT_SCAN_INTERVAL)
+
+
+# --- switching off / per-product blocking --------------------------------------
+# Regression: after switching the machine off it reported
+# switch_off_delay_active for minutes. The HA Brew button (whose staged
+# product the machine reported as blocked) went unavailable, but jura.brew
+# -- used by the Coffee Button cards -- checked neither that status nor the
+# per-product blocking, sent the recipe, and only failed 30 s later.
+
+
+def test_switch_off_delay_blocks_brewing(ready_snapshot):
+    coordinator = _coordinator()
+    coordinator.data = _with_alerts(ready_snapshot, "switch_off_delay_active")
+    assert coordinator.brew_blocker() == "switch_off_delay_active"
+    assert JuraBrewButton(coordinator, coordinator.config_entry).available is False
+
+
+async def test_brew_refused_while_switching_off(ready_snapshot):
+    coordinator = _real_brew_coordinator(_with_alerts(ready_snapshot, "switch_off_delay_active"), None)
+    with pytest.raises(HomeAssistantError) as exc:
+        await coordinator.run_brew("02000809000002000100000000000000", product="espresso")
+    assert exc.value.translation_key == "machine_not_ready"
+    assert exc.value.translation_placeholders == {"state": "switch off delay active"}
+    coordinator.backend.follow_brew.assert_not_awaited()
+
+
+def _milk_blocked(snapshot):
+    return dataclasses.replace(
+        snapshot,
+        active_alerts=("coffee_ready", "cappu_clean_alert"),
+        blocked_products=("cappuccino", "latte_macchiato"),
+        blocking_alerts=("cappu_clean_alert",),
+    )
+
+
+def test_blocker_is_per_product(ready_snapshot):
+    coordinator = _coordinator()
+    coordinator.data = _milk_blocked(ready_snapshot)
+    assert coordinator.brew_blocker() is None  # machine-wide: fine
+    assert coordinator.brew_blocker("espresso") is None
+    assert coordinator.brew_blocker("cappuccino") == "cappu_clean_alert"
+    assert coordinator.brew_blocker("CAPPUCCINO") == "cappu_clean_alert"
+
+
+def test_blocker_without_reported_reason(ready_snapshot):
+    coordinator = _coordinator()
+    coordinator.data = dataclasses.replace(ready_snapshot, blocked_products=("espresso",))
+    assert coordinator.brew_blocker("espresso") == "product_blocked"
+
+
+async def test_service_path_refuses_a_blocked_product_without_sending_it(ready_snapshot):
+    coordinator = _real_brew_coordinator(_milk_blocked(ready_snapshot), None)
+    with pytest.raises(HomeAssistantError) as exc:
+        await coordinator.run_brew("04000809000002000100000000000000", product="cappuccino")
+    assert exc.value.translation_key == "machine_not_ready"
+    coordinator.backend.follow_brew.assert_not_awaited()
+
+    # Another drink is still fine.
+    await coordinator.run_brew("02000809000002000100000000000000", product="espresso")
+    coordinator.backend.follow_brew.assert_awaited_once()
+
+
+def test_status_sensor_reports_brew_readiness(ready_snapshot):
+    from custom_components.jura.sensor import StateSensor
+
+    coordinator = _coordinator()
+    sensor = StateSensor(coordinator, coordinator.config_entry)
+
+    coordinator.data = ready_snapshot
+    attrs = sensor.extra_state_attributes
+    assert attrs["brew_ready"] is True
+    assert attrs["brew_blocker"] is None
+    assert attrs["brewing"] is False
+
+    coordinator.data = _with_alerts(ready_snapshot, "switch_off_delay_active")
+    assert sensor.native_value == "switch_off_delay_active"
+    attrs = sensor.extra_state_attributes
+    assert attrs["brew_ready"] is False
+    assert attrs["brew_blocker"] == "switch_off_delay_active"
+
+    coordinator.data = _milk_blocked(ready_snapshot)
+    attrs = sensor.extra_state_attributes
+    assert attrs["brew_ready"] is True  # machine-wide
+    assert attrs["blocked_products"] == ["cappuccino", "latte_macchiato"]
+
+    coordinator.data = dataclasses.replace(ready_snapshot, handshake_state=HANDSHAKE_STATE_OFFLINE)
+    assert sensor.extra_state_attributes["brew_ready"] is False
+
+    coordinator.data = ready_snapshot
+    coordinator.brew_pending = True
+    attrs = sensor.extra_state_attributes
+    assert attrs["brew_ready"] is False
+    assert attrs["brewing"] is True
+
+
+def test_status_prefers_switch_off_delay_over_ready(ready_snapshot):
+    from custom_components.jura.sensor import StateSensor
+
+    coordinator = _coordinator()
+    coordinator.data = _with_alerts(ready_snapshot, "coffee_ready", "switch_off_delay_active")
+    assert StateSensor(coordinator, coordinator.config_entry).native_value == "switch_off_delay_active"

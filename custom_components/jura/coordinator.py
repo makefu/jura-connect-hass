@@ -138,6 +138,14 @@ def _is_offline_error(err: BaseException) -> bool:
     return any(hint in text for hint in _OFFLINE_MESSAGE_HINTS)
 
 
+def _first_by_priority(alerts: set[str]) -> str | None:
+    """The alert the status sensor would show first; unknown ones last, sorted."""
+    for name in STATE_PRIORITY:
+        if name in alerts:
+            return name
+    return next(iter(sorted(alerts)), None)
+
+
 class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
     """Polls one Jura machine and serves snapshots to entities."""
 
@@ -447,27 +455,38 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
         await self.async_request_refresh()
         return result
 
-    def brew_blocker(self) -> str | None:
+    def brew_blocker(self, product: str | None = None) -> str | None:
         """The active alert that prevents brewing right now, or ``None``.
 
-        Highest-priority blocking alert first (same order as the status
-        sensor). ``None`` without a snapshot or while OFFLINE: reachability
-        is judged separately.
+        Machine-wide blockers first (:data:`BREW_BLOCKING_ALERTS`, e.g.
+        heating up, switch-off delay), then -- for ``product`` -- the
+        profile's per-product blocking reported by the machine
+        (``blocked_products``, e.g. no milk drinks while the milk system
+        needs cleaning). Highest-priority alert first, same order as the
+        status sensor. ``None`` without a snapshot or while OFFLINE:
+        reachability is judged separately.
         """
         snapshot = self.data
         if snapshot is None or snapshot.handshake_state == HANDSHAKE_STATE_OFFLINE:
             return None
-        active = set(snapshot.active_alerts) & BREW_BLOCKING_ALERTS
-        for name in STATE_PRIORITY:
-            if name in active:
-                return name
-        return next(iter(sorted(active)), None)
+        blocker = _first_by_priority(set(snapshot.active_alerts) & BREW_BLOCKING_ALERTS)
+        if blocker is not None:
+            return blocker
+        if product is not None and product.casefold() in {p.casefold() for p in snapshot.blocked_products}:
+            return _first_by_priority(set(snapshot.blocking_alerts)) or "product_blocked"
+        return None
 
     def _set_brew_pending(self, pending: bool) -> None:
         self.brew_pending = pending
         self.async_update_listeners()
 
-    async def run_brew(self, recipe: str, *, follow_seconds: float | None = None) -> dict[str, Any]:
+    async def run_brew(
+        self,
+        recipe: str,
+        *,
+        follow_seconds: float | None = None,
+        product: str | None = None,
+    ) -> dict[str, Any]:
         """Start a brew and follow its progress stream, then refresh state.
 
         Blocks for the duration of the dispense (bounded by
@@ -477,15 +496,16 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
 
         Refused up front (translated ``HomeAssistantError``) while another
         brew runs (``brew_in_progress``) or the machine is not ready
-        (``machine_not_ready``, e.g. heating up): the machine ACKs a recipe
-        while heating but never brews it. Failures surface as translated
+        (``machine_not_ready``, e.g. heating up, switching off, or the
+        requested ``product`` blocked by the machine): the machine ACKs a
+        recipe it cannot brew and silently ignores it. Failures surface as translated
         errors too: ``machine_unreachable`` (and the machine is marked
         OFFLINE at once), ``brew_not_started`` (no progress after the ACK),
         ``brew_failed``.
         """
         if self.brew_pending:
             raise HomeAssistantError(translation_domain=DOMAIN, translation_key="brew_in_progress")
-        blocker = self.brew_blocker()
+        blocker = self.brew_blocker(product)
         if blocker is not None:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,

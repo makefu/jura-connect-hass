@@ -53,8 +53,18 @@ def test_state_sensor_none_without_data(fake_config_entry):
     # Poll-health keys stay present even without a snapshot; the MagicMock
     # coordinator's own attributes ride through unchanged.
     attrs = sensor.extra_state_attributes
-    assert set(attrs) == {"last_successful_update", "last_poll_success"}
+    assert set(attrs) == {
+        "last_successful_update",
+        "last_poll_success",
+        "brew_ready",
+        "brew_blocker",
+        "brewing",
+        "blocked_products",
+    }
     assert attrs["last_poll_success"] is sensor.coordinator.last_poll_success
+    # No snapshot: nothing can be brewed.
+    assert attrs["brew_ready"] is False
+    assert attrs["blocked_products"] == []
 
 
 def test_state_sensor_attributes_include_snapshot(sample_snapshot, fake_config_entry):

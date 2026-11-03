@@ -60,6 +60,7 @@
       not_ready_hint: "Machine not ready yet",
       brew_in_progress: "Already brewing",
       brew_not_started: "Did not start brewing, still heating up?",
+      product_blocked: "Drink not available right now",
       setup_retry: "Machine not reachable, retrying…",
       not_loaded: "Integration not loaded",
       default_recipe: "Factory recipe",
@@ -95,6 +96,7 @@
       not_ready_hint: "Maschine noch nicht bereit",
       brew_in_progress: "Es wird bereits gebrüht",
       brew_not_started: "Brühen nicht gestartet, heizt sie noch auf?",
+      product_blocked: "Getränk gerade nicht verfügbar",
       setup_retry: "Maschine nicht erreichbar, neuer Versuch läuft…",
       not_loaded: "Integration nicht geladen",
       default_recipe: "Standardrezept",
@@ -126,7 +128,7 @@
 
   // Status sensor value -> mood (same buckets as jura-brew-card).
   const ATTENTION = /alert|error|fill_|empty_|insert_|remove_|missing|close_|no_beans|not_enough|please_wait|program_mode/;
-  const BUSY = /heating|rinsing|filling|emptying|ventilation|press_rinse|welcome|goodbye/;
+  const BUSY = /heating|rinsing|filling|emptying|ventilation|press_rinse|welcome|goodbye|switch_off/;
   function statusMood(raw) {
     if (raw == null || raw === "unavailable" || raw === "unknown") return "offline";
     if (ATTENTION.test(raw)) return "attention";
@@ -141,6 +143,75 @@
     if (/latte|cappu|milk|flat_white|cortado|macchiato/.test(n)) return "mdi:coffee-outline";
     if (/pot/.test(n)) return "mdi:coffee-maker";
     return "mdi:coffee";
+  }
+
+  // Machine states the integration does not translate (raw alert names).
+  const STATUS_TEXT = {
+    en: {
+      heating_up: "Heating up",
+      switch_off_delay_active: "Switching off",
+      goodbye: "Switching off",
+      coffee_rinsing: "Rinsing",
+      press_rinse: "Press rinse",
+      system_filling: "Filling system",
+      system_emptying: "Emptying system",
+      please_wait: "Please wait",
+      fill_water: "Fill water",
+      empty_grounds: "Empty grounds",
+      empty_tray: "Empty drip tray",
+      insert_tray: "Insert drip tray",
+      no_beans: "Fill beans",
+      cappu_clean_alert: "Clean milk system",
+      descale_alert: "Descale",
+      cleaning_alert: "Clean",
+      filter_alert: "Change filter",
+    },
+    de: {
+      heating_up: "Heizt auf",
+      switch_off_delay_active: "Schaltet aus",
+      goodbye: "Schaltet aus",
+      coffee_rinsing: "Spült",
+      press_rinse: "Spülen drücken",
+      system_filling: "System wird gefüllt",
+      system_emptying: "System wird entleert",
+      please_wait: "Bitte warten",
+      fill_water: "Wasser füllen",
+      empty_grounds: "Trester leeren",
+      empty_tray: "Schale leeren",
+      insert_tray: "Schale einsetzen",
+      no_beans: "Bohnen füllen",
+      cappu_clean_alert: "Milchsystem reinigen",
+      descale_alert: "Entkalken",
+      cleaning_alert: "Reinigen",
+      filter_alert: "Filter wechseln",
+    },
+  };
+
+  function statusText(hass, stateObj, raw) {
+    const value = raw || (stateObj && stateObj.state);
+    if (!value) return "";
+    const lang = ((hass && ((hass.locale && hass.locale.language) || hass.language)) || "en").split("-")[0];
+    const own = (STATUS_TEXT[lang] || STATUS_TEXT.en)[value];
+    if (own) return own;
+    const formatted = stateObj && hass && hass.formatEntityState && !raw ? hass.formatEntityState(stateObj) : "";
+    return formatted && formatted !== value ? formatted : prettify(value);
+  }
+
+  // Can this drink be started now? The status sensor carries the
+  // integration's verdict (brew_ready / brewing / blocked_products); the
+  // Brew button entity is the fallback for older integration versions. The
+  // button alone is not enough: its availability reflects the brew panel's
+  // own product, not this tile's.
+  function brewState(hass, machine, product) {
+    const status = machine.entities.status && hass.states[machine.entities.status];
+    const a = status && status.attributes;
+    if (a && Object.prototype.hasOwnProperty.call(a, "brew_ready")) {
+      const wanted = product.name.toLowerCase();
+      const blocked = (a.blocked_products || []).some((p) => `${p}`.toLowerCase() === wanted);
+      return { ready: !!a.brew_ready && !blocked, blocked: blocked, blocker: a.brew_blocker || null };
+    }
+    const button = machine.entities.brew_button && hass.states[machine.entities.brew_button];
+    return { ready: !(button && button.state === "unavailable"), blocked: false, blocker: null };
   }
 
   // --- shared machine table ---------------------------------------------------
@@ -476,8 +547,7 @@
     async _onPress() {
       const { machine, product } = this._context();
       if (!machine || !product || this._phase === "brewing" || this._isOffline(machine)) return;
-      const brewButton = machine.entities.brew_button && this._hass.states[machine.entities.brew_button];
-      if (brewButton && brewButton.state === "unavailable") return;
+      if (!brewState(this._hass, machine, product).ready) return;
       if (this._config.confirm && this._phase !== "confirm") {
         this._setPhase("confirm", 3000);
         return;
@@ -551,14 +621,16 @@
       const status = machine.entities.status && hass.states[machine.entities.status];
       const mood = offline ? "offline" : statusMood(status && status.state);
       els.dot.className = `dot ${mood}`;
-      // The integration's Brew button is the source of truth for "can brew
-      // now": unavailable while heating up, rinsing, waiting for water, or
-      // while a brew (from anywhere) is running.
-      const brewButton = machine.entities.brew_button && hass.states[machine.entities.brew_button];
-      const notReady = !offline && !!brewButton && brewButton.state === "unavailable";
+      // Not ready: heating up, switching off, waiting for water, a brew
+      // running anywhere, or this drink blocked by the machine.
+      const brew = brewState(hass, machine, product);
+      const notReady = !offline && !brew.ready;
 
-      if ((mood === "attention" || (notReady && status)) && phase === "idle") {
-        els.sub.textContent = hass.formatEntityState ? hass.formatEntityState(status) : prettify(status.state);
+      if (notReady && brew.blocked && !brew.blocker && phase === "idle") {
+        els.sub.textContent = t.product_blocked;
+        els.sub.classList.add("attention");
+      } else if ((mood === "attention" || (notReady && status)) && phase === "idle") {
+        els.sub.textContent = statusText(hass, status, brew.blocker);
         els.sub.classList.add("attention");
       } else if (phase === "error" && this._error) {
         els.sub.textContent = this._error;

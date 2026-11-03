@@ -77,6 +77,7 @@ STATE_PRIORITY: tuple[str, ...] = (
     "ventilation_closed",
     "coffee_rinsing",
     "press_rinse",
+    "switch_off_delay_active",
     # alerts informational
     "milk_alert",
     "milk_sensor_error",
@@ -94,14 +95,16 @@ STATE_PRIORITY: tuple[str, ...] = (
 )
 STATE_IDLE = "idle"
 
-# Active alerts during which the machine cannot start a drink: it is busy
+# Active alerts during which the machine cannot start any drink: it is busy
 # (heating, rinsing, filling) or waits for the user (water, tray, grounds,
 # covers, errors). While any is active the Brew button is unavailable and
 # brew requests are refused with ``machine_not_ready`` instead of being sent
 # -- the machine ACKs a recipe while heating but never brews it, and
 # following that phantom brew held the single dongle session for minutes.
 # Maintenance reminders (descale/filter/cleaning alerts) and bean/milk hints
-# do not block: the machine still brews.
+# do not block: the machine still brews. On top of this list, the profile's
+# per-product blocking (MachineSnapshot.blocked_products) is always checked
+# for the drink actually requested.
 BREW_BLOCKING_ALERTS: frozenset[str] = frozenset(
     {
         "heating_up",
@@ -111,6 +114,7 @@ BREW_BLOCKING_ALERTS: frozenset[str] = frozenset(
         "press_rinse",
         "please_wait",
         "goodbye",
+        "switch_off_delay_active",
         "fill_water",
         "fill_system",
         "empty_grounds",

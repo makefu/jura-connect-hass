@@ -86,8 +86,11 @@ for reachability. Turn this off per machine under Advanced settings
 
 Actions are the exception: the **Brew button** is unavailable whenever the
 machine is offline, retained values or not, and while it cannot brew:
-heating up, rinsing, filling, *please wait*, or waiting for you (water,
-grounds, tray, covers, errors). Maintenance reminders such as *descale*
+heating up, switching off (`switch_off_delay_active`), rinsing, filling,
+*please wait*, or waiting for you (water, grounds, tray, covers, errors).
+On top, every brew checks the drink itself against the products the
+machine currently blocks (e.g. milk drinks while the milk system needs
+cleaning), whether it comes from the button, a card or `jura.brew`. Maintenance reminders such as *descale*
 and hints such as *no beans* do not block. While the machine is heating
 up the integration polls every 15 s instead of 60 s, so the button comes
 back soon after it is ready. A second brew while one is running is
@@ -109,6 +112,11 @@ parameter ranges come from the bundled machine profile, not from the
 machine, so the dashboard cards show your drink even while the machine is
 unreachable or its setup is being retried, with a hint instead of "no
 machine found", and turn live once it answers.
+
+The status sensor also exposes `brew_ready` (a drink can be started now,
+machine-wide), `brew_blocker` (the alert that prevents it), `brewing` (a
+brew is running) and `blocked_products` (drinks the machine blocks right
+now); the Coffee Button uses them for its drink.
 
 The status sensor exposes `last_successful_update` (UTC ISO timestamp, or
 `null` before the first successful read) and `last_poll_success` (boolean).
@@ -195,10 +203,11 @@ confirm: false           # true = tap twice to brew
 - **Brewing feedback**: the button shows *Brewing…* with the progress
   percentage while the integration follows the brew, then *Enjoy!*; errors
   appear on the tile.
-- **Not ready**: while the machine heats up, rinses or waits for water,
-  the button reads *Not ready* and the subtitle shows the reason (e.g.
-  *Heating up*). The tile follows the integration's Brew button, so it is
-  also blocked while a brew started elsewhere is running.
+- **Not ready**: while the machine heats up, switches off, rinses or waits
+  for water, the button reads *Not ready* and the subtitle shows the
+  reason (e.g. *Heating up*, *Switching off*). The tile checks its own
+  drink, so a blocked milk drink does not disable an espresso tile, and it
+  is also blocked while a brew started elsewhere is running.
 - **Offline**: the button is disabled while the connectivity sensor is not
   on, and the tile says why (*Machine not reachable*, also while Home
   Assistant retries the setup). Pressing Brew on a machine that has just

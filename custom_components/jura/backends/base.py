@@ -57,6 +57,9 @@ class MachineSnapshot:
     # Used to gate the brew button so it goes unavailable instead of
     # erroring when the machine won't dispense the selected product.
     blocked_products: tuple[str, ...] = ()
+    # Active alerts that block at least one product kind (profile metadata);
+    # the reason shown when a requested product is in blocked_products.
+    blocking_alerts: tuple[str, ...] = ()
     # Last @TV: ProductProgress.to_dict() seen from a followed brew
     # (see coordinator.run_brew). None until a brew has been followed.
     progress: dict[str, Any] | None = None

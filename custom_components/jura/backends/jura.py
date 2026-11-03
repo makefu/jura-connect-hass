@@ -185,6 +185,7 @@ class JuraConnectBackend(JuraBackend):
                 machine_type_name=self._machine_type_name,
                 settings=settings_values,
                 blocked_products=tuple(info.status.blocked_products),
+                blocking_alerts=tuple(info.status.blocking_alerts),
                 progress=None,
             )
 

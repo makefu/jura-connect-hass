@@ -59,7 +59,7 @@
   // Map a raw status string to a coffee-machine "mood": drives the banner colour
   // and icon. Ordering matters — attention beats busy beats ready.
   const ATTENTION = /alert|error|fill_|empty_|insert_|remove_|missing|close_|no_beans|not_enough|please_wait|program_mode/;
-  const BUSY = /heating|rinsing|filling|emptying|ventilation|press_rinse|welcome|goodbye/;
+  const BUSY = /heating|rinsing|filling|emptying|ventilation|press_rinse|welcome|goodbye|switch_off/;
   const READY = /ready|idle|enjoy|energy_safe/;
 
   function statusMood(raw) {

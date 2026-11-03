@@ -334,7 +334,7 @@ async def test_grinder_ratio_is_staged_persisted_and_sent_as_f2_override():
 
     espresso = load_profile("EF566").product_by_code[0x02]
     expected = espresso.build_recipe_hex({KIND_GRINDER_RATIO: "100_0"})
-    coordinator.run_brew.assert_awaited_once_with(expected)
+    coordinator.run_brew.assert_awaited_once_with(expected, product="espresso")
 
 
 async def test_grinder_ratio_is_unavailable_for_product_without_f2():
@@ -442,7 +442,7 @@ async def test_button_press_espresso_factory_default_vector():
     button = JuraBrewButton(coordinator, _entry())
     await button.async_press()
     expected = _recipe(0x02)
-    coordinator.run_brew.assert_awaited_once_with(expected)
+    coordinator.run_brew.assert_awaited_once_with(expected, product="espresso")
     # The recipe must NOT carry the @TP: prefix (the backend adds it).
     sent = coordinator.run_brew.await_args.args[0]
     assert not sent.startswith("@TP:")
@@ -472,7 +472,7 @@ async def test_button_press_coffee_override_vector_via_selection_path():
         0x03,
         {KIND_COFFEE_STRENGTH: 2, KIND_WATER_AMOUNT: 130, KIND_TEMPERATURE: 1},
     )
-    coordinator.run_brew.assert_awaited_once_with(expected)
+    coordinator.run_brew.assert_awaited_once_with(expected, product="coffee")
 
 
 async def test_button_press_cappuccino_milk_foam_override_vector():
@@ -488,7 +488,7 @@ async def test_button_press_cappuccino_milk_foam_override_vector():
     await button.async_press()
 
     expected = _recipe(0x04, {KIND_MILK_FOAM_AMOUNT: 12})
-    coordinator.run_brew.assert_awaited_once_with(expected)
+    coordinator.run_brew.assert_awaited_once_with(expected, product="cappuccino")
 
 
 # ---------------------------------------------------------------------------

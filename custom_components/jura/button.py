@@ -86,11 +86,8 @@ class JuraBrewButton(JuraEntity, ButtonEntity):
             return False
         # Not ready (heating up, rinsing, fill water, ...) or already brewing:
         # a press could not brew and would only block the dongle session.
-        if self.coordinator.brew_pending or self.coordinator.brew_blocker() is not None:
-            return False
-        # The machine refuses blocked products right now; go unavailable
-        # instead of erroring when the user presses brew.
-        return data is None or product.name not in data.blocked_products
+        # The selected product blocked by the machine counts too.
+        return not self.coordinator.brew_pending and self.coordinator.brew_blocker(product.name) is None
 
     async def async_press(self) -> None:
         product = self.coordinator.selected_product()
@@ -103,4 +100,4 @@ class JuraBrewButton(JuraEntity, ButtonEntity):
             if value is not None:
                 overrides[kind] = value
         recipe = product.build_recipe_hex(overrides)
-        await self.coordinator.run_brew(recipe)
+        await self.coordinator.run_brew(recipe, product=product.name)

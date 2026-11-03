@@ -245,6 +245,8 @@ def _register_services(hass: HomeAssistant) -> None:
         coordinator = _get_coordinator(hass, config_entry_id)
         product_name = call.data.get("product")
         recipe = call.data.get("recipe")
+        # Profile product name for the per-product "can it brew now" check.
+        brew_product: str | None = None
         if product_name and recipe:
             raise vol.Invalid("Provide either product or recipe, not both")
         if product_name:
@@ -258,9 +260,10 @@ def _register_services(hass: HomeAssistant) -> None:
                 if value is not None:
                     overrides[kind] = value
             recipe = product.build_recipe_hex(overrides)
+            brew_product = product.name
         elif not recipe:
             raise vol.Invalid("Provide either product or recipe")
-        return await coordinator.run_brew(recipe)
+        return await coordinator.run_brew(recipe, product=brew_product)
 
     hass.services.async_register(
         DOMAIN,

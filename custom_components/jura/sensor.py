@@ -18,7 +18,7 @@ from .const import (
     STATE_IDLE,
     STATE_PRIORITY,
 )
-from .coordinator import JuraCoordinator
+from .coordinator import HANDSHAKE_STATE_OFFLINE, JuraCoordinator
 from .entity import JuraEntity
 from .serializers import percent_value, serialize_snapshot
 
@@ -103,9 +103,20 @@ class StateSensor(JuraEntity, SensorEntity):
             "last_poll_success": self.coordinator.last_poll_success,
         }
         snapshot = _snapshot(self.coordinator)
+        # "Can a drink be started now?" for dashboards: machine-wide plus the
+        # products the machine blocks right now (cards check their drink).
+        coordinator = self.coordinator
+        online = snapshot is not None and snapshot.handshake_state != HANDSHAKE_STATE_OFFLINE
+        blocker = coordinator.brew_blocker() if online else None
+        brew = {
+            "brew_ready": bool(online and blocker is None and not coordinator.brew_pending),
+            "brew_blocker": blocker,
+            "brewing": bool(coordinator.brew_pending),
+            "blocked_products": list(snapshot.blocked_products) if snapshot is not None else [],
+        }
         if snapshot is None:
-            return health
-        return {**serialize_snapshot(snapshot), **health}
+            return {**health, **brew}
+        return {**serialize_snapshot(snapshot), **health, **brew}
 
 
 class BrewProgressSensor(JuraEntity, SensorEntity):

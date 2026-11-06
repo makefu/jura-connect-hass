@@ -63,6 +63,39 @@ declaration; Nix users get it pinned via the flake input.
 - **`number.*`** entities for step-slider settings (currently water
   hardness on EF1091) with the min/max/step pulled from the profile XML.
 
+### Clock synchronization (GIGA 6)
+
+For the `EF566` GIGA 6 profile, choose **One-off via button** or
+**Automatic** under **Configure → Advanced settings → Clock
+synchronization (GIGA 6)**. The default is **Off**. Both modes provide
+the **Synchronize clock with HA** button. In automatic mode, HA checks
+the first time the machine is ready on a new local day or after a UTC
+offset change. This lets the GIGA 6 follow the spring and autumn clock
+changes without adjusting it in the machine menu. It does not wake the machine. If a check is blocked
+before a possible write, it can try again on a ready poll at least
+15 minutes later. A verified result or possible write is not repeated
+in the same date and offset period, including after a reload.
+**Clock synchronization** under Diagnostics shows the current outcome.
+**Last successful clock check** retains the time of the last confirmed
+check across restarts, including when the clock was already correct.
+The button is available when the machine is ready for coffee. A check
+that adjusts the clock can take about two minutes.
+
+The action uses the configured Home Assistant time zone. Every clock
+check compares HA's time in UTC against the selected NTP host. Configure
+an internal or public hostname or IP address; the default is
+`pool.ntp.org`. When the selected host does not provide a valid reply,
+the action falls back to HA's time without querying another server. A
+valid NTP reply that differs by more than five seconds stops the action.
+
+The action leaves the date and timers untouched. It refuses a write
+unless the JURA date equals the HA local date, and blocks around
+midnight or a time zone offset change, or
+when the jump crosses or comes within five minutes of a timer. The
+check considers all timer slots, including switch-off and all-days
+times. It verifies the time after writing and again after the clock
+has had time to advance. An already aligned clock is not written.
+
 ### Diagnostics (collapsed by default)
 
 - **Machine type** — the EF code + friendly name (e.g. `S8 (EB)` with

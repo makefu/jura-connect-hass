@@ -42,6 +42,34 @@
             },
             "percent_descale": {
                 "name": "Entkalkungsstand"
+            },
+            "clock_last_check": {
+                "name": "Letzte erfolgreiche Uhrprüfung"
+            },
+            "clock_sync_status": {
+                "name": "Uhrensynchronisation",
+                "state": {
+                    "not_run": "Seit dem Laden noch nicht geprüft",
+                    "checking": "Prüfung läuft",
+                    "verifying": "Weiterlauf wird geprüft",
+                    "already_aligned": "Uhr stimmt bereits",
+                    "synchronized": "Synchronisiert und geprüft",
+                    "failed": "Prüfung fehlgeschlagen"
+                },
+                "state_attributes": {
+                    "ntp": {
+                        "name": "NTP-Prüfung"
+                    },
+                    "jura_time": {
+                        "name": "JURA-Uhrzeit"
+                    },
+                    "checked_at": {
+                        "name": "Geprüft um"
+                    },
+                    "detail": {
+                        "name": "Hinweis"
+                    }
+                }
             }
         },
         "binary_sensor": {
@@ -255,6 +283,37 @@
         "number": {
             "setting": {
                 "name": "Einstellung {setting}"
+            }
+        },
+        "button": {
+            "clock_sync": {
+                "name": "Uhr mit HA synchronisieren"
+            }
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "clock_sync": "Uhrensynchronisation (GIGA 6)",
+                    "clock_ntp_server": "NTP-Server für Plausibilitätsprüfung"
+                },
+                "data_description": {
+                    "clock_sync": "Einmalig per Knopf oder automatisch, sobald die JURA betriebsbereit ist.",
+                    "clock_ntp_server": "Interner oder öffentlicher Hostname bzw. IP-Adresse. Standard: pool.ntp.org. Ohne Antwort verwendet JURA die HA-Zeit."
+                }
+            }
+        },
+        "error": {
+            "invalid_clock_ntp_server": "Bitte einen Hostnamen oder eine IP-Adresse ohne Protokoll oder Port eingeben."
+        }
+    },
+    "selector": {
+        "clock_sync_mode": {
+            "options": {
+                "off": "Aus",
+                "manual": "Einmalig per Knopf",
+                "automatic": "Automatisch"
             }
         }
     }

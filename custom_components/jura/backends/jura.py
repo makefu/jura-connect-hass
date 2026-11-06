@@ -11,7 +11,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from typing import Any
+from threading import Event
+from typing import Any, TypeVar
 
 from jura_connect import (
     DestructiveCommandError,
@@ -28,6 +29,8 @@ from jura_connect import (
 )
 from jura_connect.client import BREW_REPLY_MATCH
 
+from ..clock import CLOCK_MODEL, ClockReading, ClockReference, ClockUpdate
+
 from .base import (
     DiscoveredMachine,
     JuraAuthError,
@@ -35,8 +38,10 @@ from .base import (
     JuraBackendError,
     MachineSnapshot,
 )
+from .clock import read_clock, start_clock_sync
 
 _LOGGER = logging.getLogger(__name__)
+_ClockResult = TypeVar("_ClockResult", ClockReading, ClockUpdate)
 
 
 def _resolve_profile_and_name(machine_type: str | None) -> tuple[MachineProfile | None, str | None]:
@@ -77,6 +82,7 @@ class JuraConnectBackend(JuraBackend):
         machine_type: str | None = None,
         connect_timeout: float = 5.0,
         read_timeout: float = 10.0,
+        clock_sync: bool = False,
     ) -> None:
         self.address = address
         self.port = port
@@ -86,6 +92,7 @@ class JuraConnectBackend(JuraBackend):
         self.machine_type = machine_type or None
         self.connect_timeout = connect_timeout
         self.read_timeout = read_timeout
+        self.clock_sync = clock_sync and self.machine_type == CLOCK_MODEL
         self._profile, self._machine_type_name = _resolve_profile_and_name(self.machine_type)
 
     def _make_client(self) -> JuraClient:
@@ -188,6 +195,43 @@ class JuraConnectBackend(JuraBackend):
 
     async def unlock(self) -> None:
         await self.run_named("unlock")
+
+    async def _clock_operation(self, operation: Callable[[JuraClient, Event], _ClockResult]) -> _ClockResult:
+        if not self.clock_sync:
+            raise JuraBackendError("Clock synchronization is not enabled for this JURA")
+        stop = Event()
+
+        def _do() -> _ClockResult:
+            client = self._make_client()
+            try:
+                if client.connect().state != "CORRECT":
+                    raise JuraAuthError("JURA authentication rejected")
+                return operation(client, stop)
+            except HandshakeError as err:
+                raise JuraAuthError(str(err)) from err
+            except (OSError, ValueError) as err:
+                raise JuraBackendError(f"JURA clock operation failed: {err}") from err
+            finally:
+                client.close()
+
+        task = asyncio.create_task(asyncio.to_thread(_do))
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            stop.set()
+            # Do not give up the coordinator's session while the worker
+            # is still holding the dongle or sending the keypad release.
+            try:
+                await task
+            except JuraBackendError:
+                _LOGGER.debug("JURA clock session ended after cancellation", exc_info=True)
+            raise
+
+    async def start_clock_sync(self, reference: ClockReference) -> ClockUpdate:
+        return await self._clock_operation(lambda client, stop: start_clock_sync(client, reference, stop))
+
+    async def read_clock(self, reference: ClockReference) -> ClockReading:
+        return await self._clock_operation(lambda client, stop: read_clock(client, reference, stop))
 
     async def write_setting(self, name: str, value: str) -> str:
         """Write a setting and return the post-write stored hex.

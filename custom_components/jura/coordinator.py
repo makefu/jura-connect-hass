@@ -11,17 +11,32 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from jura_connect import MachineProfile, ProductDef, load_profile
 
-from .backends.base import JuraAuthError, JuraBackend, JuraBackendError, MachineSnapshot
+from .backends.base import ClockWriteUnverified, JuraAuthError, JuraBackend, JuraBackendError, MachineSnapshot
 from .backends.jura import JuraConnectBackend
 from .brew import remember_param, selection_for_product
+from .clock import (
+    CLOCK_CHECK_SECONDS,
+    CLOCK_AUTO_RETRY_SECONDS,
+    CLOCK_MODEL,
+    CONF_CLOCK_NTP_SERVER,
+    CONF_CLOCK_SYNC,
+    DEFAULT_CLOCK_NTP_SERVER,
+    ClockReference,
+    ClockSyncStatus,
+    NtpStatus,
+    check_ntp,
+    clock_auto_period,
+    clock_machine_ready,
+)
 from .const import (
     CONF_AUTH_HASH,
     CONF_BREW_FOLLOW_SECONDS,
@@ -40,6 +55,16 @@ from .const import (
 _sleep = asyncio.sleep
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def clock_sync_enabled(entry: ConfigEntry) -> bool:
+    options = getattr(entry, "options", None) or {}
+    return entry.data.get(CONF_MACHINE_TYPE) == CLOCK_MODEL and options.get(CONF_CLOCK_SYNC) in ("manual", "automatic")
+
+
+def automatic_clock_sync_enabled(entry: ConfigEntry) -> bool:
+    return clock_sync_enabled(entry) and entry.options.get(CONF_CLOCK_SYNC) == "automatic"
+
 
 # Persisted brew-preferences store. Bump the version only on an incompatible
 # on-disk schema change. Saves are debounced by this many seconds so a flurry
@@ -189,6 +214,15 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
         # written back (debounced) by ``save_brew_prefs``.
         self.brew_prefs: dict[str, dict[str, int | None]] = {}
         self._brew_prefs_store: Store | None = None
+        self.clock_sync_status = ClockSyncStatus()
+        self.clock_last_check: datetime | None = None
+        self._clock_last_check_store: Store[str] | None = None
+        self._clock_sync_task: asyncio.Task[None] | None = None
+        self._clock_auto_store: Store | None = None
+        self._clock_auto_zone: ZoneInfo | None = None
+        self._clock_auto_periods: list[str] = []
+        self._clock_auto_retry_at = 0.0
+        self._clock_shutting_down = False
         # Serialise all machine I/O (polls + commands + setting writes) so the
         # coordinator never opens a second TCP session while one is in flight —
         # the dongle only serves one at a time. The lock also covers the quiet
@@ -300,6 +334,147 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
             return
         self.backend = await asyncio.to_thread(self._build_backend, self.config_entry)
 
+    @property
+    def clock_sync_available(self) -> bool:
+        return bool(
+            clock_sync_enabled(self.config_entry)
+            and self.last_poll_success
+            and self.last_update_success
+            and self.data is not None
+            and self.data.handshake_state == "CORRECT"
+            and clock_machine_ready(self.data.active_alerts, self.data.errors)
+            and not self._follow_brew_active
+            and not self._clock_shutting_down
+            and (self._clock_sync_task is None or self._clock_sync_task.done())
+        )
+
+    async def async_load_clock_last_check(self) -> None:
+        self._clock_last_check_store = Store(self.hass, 1, f"{DOMAIN}.clock_last_check.{self.config_entry.entry_id}")
+        value = await self._clock_last_check_store.async_load()
+        if isinstance(value, str):
+            try:
+                checked_at = datetime.fromisoformat(value)
+            except ValueError:
+                return
+            if checked_at.utcoffset() is not None:
+                self.clock_last_check = checked_at
+
+    async def _async_record_clock_check(self, checked_at: datetime) -> None:
+        self.clock_last_check = checked_at
+        if self._clock_last_check_store is not None:
+            await self._clock_last_check_store.async_save(checked_at.isoformat())
+
+    async def async_load_clock_auto_state(self) -> None:
+        self._clock_auto_zone = await self.hass.async_add_executor_job(ZoneInfo, self.hass.config.time_zone)
+        self._clock_auto_store = Store(self.hass, 1, f"{DOMAIN}.clock_sync.{self.config_entry.entry_id}")
+        data = await self._clock_auto_store.async_load()
+        if isinstance(data, list):
+            self._clock_auto_periods = [period for period in data[-4:] if isinstance(period, str)]
+
+    @callback
+    def maybe_auto_clock_sync(self) -> None:
+        if not automatic_clock_sync_enabled(self.config_entry) or not self.clock_sync_available:
+            return
+        if time.monotonic() < self._clock_auto_retry_at:
+            return
+        zone = self._clock_auto_zone
+        if zone is not None and zone.key == self.hass.config.time_zone:
+            local = datetime.now(zone)
+            if clock_auto_period(local) in self._clock_auto_periods:
+                return
+        self._clock_auto_retry_at = time.monotonic() + CLOCK_AUTO_RETRY_SECONDS
+        self._start_clock_sync(automatic=True)
+
+    @callback
+    def start_clock_sync(self) -> None:
+        """Start an explicit one-off sync, tied to the entry lifecycle."""
+        if not self.clock_sync_available:
+            raise HomeAssistantError("JURA clock synchronization is unavailable or already running")
+        self._start_clock_sync(automatic=False)
+
+    @callback
+    def _start_clock_sync(self, *, automatic: bool) -> None:
+        self.clock_sync_status = ClockSyncStatus("checking")
+        self._clock_sync_task = self.config_entry.async_create_background_task(
+            self.hass, self._async_clock_sync(automatic=automatic), "jura_clock_sync", eager_start=False
+        )
+        self._clock_sync_task.add_done_callback(self._clock_sync_done)
+        self.async_update_listeners()
+
+    @callback
+    def _clock_sync_done(self, task: asyncio.Task[None]) -> None:
+        if self._clock_sync_task is task:
+            self._clock_sync_task = None
+            self.async_update_listeners()
+
+    async def async_cancel_clock_sync(self) -> None:
+        self._clock_shutting_down = True
+        task = self._clock_sync_task
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    async def _async_clock_sync(self, *, automatic: bool = False) -> None:
+        ntp: NtpStatus | None = None
+        reserved_period: str | None = None
+        wrote = False
+        try:
+            zone = await self.hass.async_add_executor_job(ZoneInfo, self.hass.config.time_zone)
+            self._clock_auto_zone = zone
+            reference = ClockReference.capture(zone)
+            period = clock_auto_period(reference.now())
+            if automatic and period in self._clock_auto_periods:
+                self.clock_sync_status = ClockSyncStatus()
+                return
+            server = self.config_entry.options.get(CONF_CLOCK_NTP_SERVER, DEFAULT_CLOCK_NTP_SERVER)
+            ntp = await check_ntp(server, reference)
+            if ntp == "disagrees":
+                raise ValueError("NTP disagrees with the Home Assistant clock; no JURA setting was written")
+            async with self._machine_session():
+                if automatic:
+                    if not automatic_clock_sync_enabled(self.config_entry):
+                        raise ValueError("Automatic JURA clock synchronization is disabled")
+                    # Reserve before asking the backend to write. A shutdown
+                    # or lost reply must not allow another write after reload.
+                    reserved_period = period
+                    await self._save_clock_auto_periods([*self._clock_auto_periods, period][-4:])
+                update = await self.backend.start_clock_sync(reference)
+                wrote = update.wrote
+            if not update.wrote:
+                self.clock_sync_status = ClockSyncStatus("already_aligned", ntp, update.reading)
+                await self._async_record_clock_check(update.reading.observed_at)
+                return
+
+            self.clock_sync_status = ClockSyncStatus("verifying", ntp, update.reading)
+            self.async_update_listeners()
+            # Leave the dongle available for normal polling and brewing
+            # between the settled readback and the running-clock check.
+            await asyncio.sleep(CLOCK_CHECK_SECONDS)
+            async with self._machine_session():
+                running = await self.backend.read_clock(reference)
+            if (
+                not running.same_schedule(update.reading)
+                or running.observed_at.utcoffset() != update.reading.observed_at.utcoffset()
+                or running.clock <= update.reading.clock
+                or not running.matches_ha()
+            ):
+                raise ValueError("The JURA clock did not pass the running check; inspect it before trying again")
+            self.clock_sync_status = ClockSyncStatus("synchronized", ntp, running)
+            await self._async_record_clock_check(running.observed_at)
+        except (JuraBackendError, ValueError, KeyError) as err:
+            self.clock_sync_status = ClockSyncStatus("failed", ntp, detail=str(err))
+            if reserved_period is not None and not wrote and not isinstance(err, ClockWriteUnverified):
+                # The backend failed before a possible write. Permit a
+                # later ready poll to try after the conservative backoff.
+                await self._save_clock_auto_periods([p for p in self._clock_auto_periods if p != reserved_period])
+        finally:
+            self.async_update_listeners()
+
+    async def _save_clock_auto_periods(self, periods: list[str]) -> None:
+        if self._clock_auto_store is not None:
+            await self._clock_auto_store.async_save(periods)
+        self._clock_auto_periods = periods
+
     @staticmethod
     def _build_backend(config_entry: ConfigEntry) -> JuraBackend:
         data = config_entry.data
@@ -310,6 +485,7 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
             conn_id=data[CONF_CONN_ID],
             auth_hash=data.get(CONF_AUTH_HASH, ""),
             machine_type=data.get(CONF_MACHINE_TYPE),
+            clock_sync=clock_sync_enabled(config_entry),
         )
 
     def _offline_snapshot(self) -> MachineSnapshot:

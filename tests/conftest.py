@@ -34,6 +34,8 @@ class Platform:
     SELECT = "select"
     NUMBER = "number"
     BUTTON = "button"
+    TIME = "time"
+    SWITCH = "switch"
 
 
 class EntityCategory(str, Enum):
@@ -360,6 +362,9 @@ class CoordinatorEntity:
         # Real HA pushes the new state to the state machine; the test stub
         # only needs the method to exist so entities can call it.
         pass
+
+    def _handle_coordinator_update(self):
+        self.async_write_ha_state()
 
 
 _make_module(
@@ -689,3 +694,20 @@ def no_wall_clock_session_gap(monkeypatch):
     from custom_components.jura import coordinator as coordinator_module
 
     monkeypatch.setattr(coordinator_module, "SESSION_COOLDOWN_SECONDS", 0)
+
+
+# Native weekday timer platforms.
+class TimeEntity:
+    @property
+    def native_value(self):
+        return self._attr_native_value
+
+
+class SwitchEntity:
+    @property
+    def is_on(self):
+        return self._attr_is_on
+
+
+_make_module("homeassistant.components.time", TimeEntity=TimeEntity)
+_make_module("homeassistant.components.switch", SwitchEntity=SwitchEntity)

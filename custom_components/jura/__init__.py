@@ -180,6 +180,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except KeyError:
             pass  # unknown type -> coordinator disables the brew panel
     coordinator = JuraCoordinator(hass, entry)
+    if coordinator.timers_enabled:
+        await coordinator.async_load_timer_times()
     await coordinator.async_config_entry_first_refresh()
     # Restore persisted per-product brew preferences,
     # keyed by product Code, so the brew panel remembers them across restarts.
@@ -187,7 +189,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await hass.config_entries.async_forward_entry_setups(entry, _entry_platforms(coordinator))
 
     _register_services(hass)
 
@@ -199,13 +201,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+def _entry_platforms(coordinator: JuraCoordinator) -> list[Platform]:
+    return [*PLATFORMS, Platform.TIME, Platform.SWITCH] if coordinator.timers_enabled else PLATFORMS
+
+
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Tear down a Jura config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    coordinator = _get_coordinator(hass, entry.entry_id)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, _entry_platforms(coordinator))
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
     return unload_ok

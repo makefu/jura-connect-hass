@@ -63,6 +63,22 @@ declaration; Nix users get it pinned via the flake input.
 - **`number.*`** entities for step-slider settings (currently water
   hardness on EF1091) with the min/max/step pulled from the profile XML.
 
+### GIGA 6 weekday switch-on timers
+
+On the GIGA 6 with machine type `EF566`, enable **Weekday switch-on
+timers (experimental)** under **Configure → Advanced settings**. The
+device page groups each weekday's switch and time field from Monday to
+Sunday. Changing an enabled timer updates its switch-on time on the
+machine. Changing a
+disabled timer saves the time in Home Assistant until you turn that
+timer on. Times are hours and minutes on the machine's local clock.
+
+The integration reads the complete timer block before writing and verifies
+it afterward. It preserves the switch-off times. Weekday edits are
+blocked while the machine has an **All days** timer. The feature starts
+disabled. This feature uses the machine's existing clock and does not
+synchronise it.
+
 ### Diagnostics (collapsed by default)
 
 - **Machine type** — the EF code + friendly name (e.g. `S8 (EB)` with

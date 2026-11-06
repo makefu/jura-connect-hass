@@ -11,7 +11,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import time
 from typing import Any
+
+from ..timers import TimerAction, TimerSlot, TimerUpdate
 
 
 @dataclass(frozen=True)
@@ -60,6 +63,7 @@ class MachineSnapshot:
     # Last @TV: ProductProgress.to_dict() seen from a followed brew
     # (see coordinator.run_brew). None until a brew has been followed.
     progress: dict[str, Any] | None = None
+    timers: dict[str, TimerSlot] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -130,3 +134,7 @@ class JuraBackend(ABC):
         ``1E``) and the caller needs the stored form to update the
         in-memory snapshot.
         """
+
+    async def update_timer(self, slot: str, action: TimerAction, value: time | None) -> TimerUpdate:
+        """Read the timer block and verify a single weekday change."""
+        raise JuraBackendError("Weekday timers are not supported by this backend")

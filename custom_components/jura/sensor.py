@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .backends.base import MachineSnapshot
+from .clock import CLOCK_SYNC_STATES
 from .const import (
     COUNTER_KEYS,
     DOMAIN,
@@ -18,7 +19,7 @@ from .const import (
     STATE_IDLE,
     STATE_PRIORITY,
 )
-from .coordinator import JuraCoordinator
+from .coordinator import JuraCoordinator, clock_sync_enabled
 from .entity import JuraEntity
 from .serializers import percent_value, serialize_snapshot
 
@@ -38,6 +39,8 @@ async def async_setup_entry(
     ]
     entities.extend(CounterSensor(coordinator, config_entry, key) for key in COUNTER_KEYS)
     entities.extend(PercentSensor(coordinator, config_entry, key) for key in PERCENT_KEYS)
+    if clock_sync_enabled(config_entry):
+        entities.extend((JuraClockSyncStatus(coordinator, config_entry), JuraClockLastCheck(coordinator, config_entry)))
     async_add_entities(entities)
 
     # Per-product brew counters are dynamic: the set of recipe codes a
@@ -65,6 +68,64 @@ async def async_setup_entry(
 
 def _snapshot(coordinator: JuraCoordinator) -> MachineSnapshot | None:
     return coordinator.data
+
+
+class JuraClockSyncStatus(JuraEntity, SensorEntity):
+    """Report the current clock check, including errors and readback."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_translation_key = "clock_sync_status"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = list(CLOCK_SYNC_STATES)
+
+    def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry) -> None:
+        super().__init__(coordinator, config_entry)
+        self._attr_unique_id = f"{DOMAIN}_{self._slug}_clock_sync_status"
+        self._update_result()
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    def _update_result(self) -> None:
+        result = self.coordinator.clock_sync_status
+        self._attr_native_value = result.state
+        attributes: dict[str, str] = {}
+        if result.ntp is not None:
+            attributes["ntp"] = result.ntp
+        if result.reading is not None:
+            attributes["jura_time"] = result.reading.clock.isoformat(timespec="minutes")
+            attributes["checked_at"] = result.reading.observed_at.isoformat(timespec="seconds")
+        if result.detail is not None:
+            attributes["detail"] = result.detail
+        self._attr_extra_state_attributes = attributes
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._update_result()
+        super()._handle_coordinator_update()
+
+
+class JuraClockLastCheck(JuraEntity, SensorEntity):
+    """Retain the time of the last successful check across restarts."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_translation_key = "clock_last_check"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry) -> None:
+        super().__init__(coordinator, config_entry)
+        self._attr_unique_id = f"{DOMAIN}_{self._slug}_clock_last_check"
+        self._attr_native_value = coordinator.clock_last_check
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._attr_native_value = self.coordinator.clock_last_check
+        super()._handle_coordinator_update()
 
 
 def _derive_state(active_alerts: tuple[str, ...]) -> str:

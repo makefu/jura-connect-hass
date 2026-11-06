@@ -445,6 +445,8 @@ class SensorEntity:
 
 class SensorDeviceClass:
     MONETARY = "monetary"
+    ENUM = "enum"
+    TIMESTAMP = "timestamp"
 
 
 _make_module(

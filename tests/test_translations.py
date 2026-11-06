@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 from jura_connect import load_profile
 
+from custom_components.jura.clock import CLOCK_SYNC_STATES
 from custom_components.jura.const import ALERT_BINARY_SENSORS, COUNTER_KEYS, PERCENT_KEYS
 
 _COMPONENT = Path(__file__).resolve().parent.parent / "custom_components" / "jura"
@@ -42,11 +43,20 @@ def en() -> dict:
 # Translation keys the code registers, grouped by platform. Keep this in
 # lock-step with the *_attr_translation_key* values set in the platforms.
 def _expected_keys() -> dict[str, set[str]]:
-    sensor = {"status", "machine_type", "brew_total", "brew_counter", "brew_progress"}
+    sensor = {
+        "status",
+        "machine_type",
+        "brew_total",
+        "brew_counter",
+        "brew_progress",
+        "clock_sync_status",
+        "clock_last_check",
+    }
     sensor |= {f"counter_{k}" for k in COUNTER_KEYS}
     sensor |= {f"percent_{k}" for k in PERCENT_KEYS}
     binary_sensor = {"connectivity", *ALERT_BINARY_SENSORS.keys()}
     return {
+        "button": {"clock_sync"},
         "sensor": sensor,
         "binary_sensor": binary_sensor,
         "select": {
@@ -149,3 +159,9 @@ def test_ef566_product_options_have_translations(catalog_name):
 
 def test_strings_and_en_mirror_match(strings, en):
     assert strings["entity"] == en["entity"]
+
+
+@pytest.mark.parametrize("catalog_name", ["strings.json", "translations/en.json", "translations/de.json"])
+def test_clock_sync_status_options_are_translated(catalog_name):
+    status = _load(catalog_name)["entity"]["sensor"]["clock_sync_status"]
+    assert set(status["state"]) == set(CLOCK_SYNC_STATES)

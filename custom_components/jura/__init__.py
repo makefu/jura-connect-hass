@@ -24,7 +24,7 @@ try:
     )
 
     from .const import CONF_MACHINE_TYPE, DOMAIN
-    from .coordinator import JuraCoordinator
+    from .coordinator import JuraCoordinator, automatic_clock_sync_enabled, clock_sync_enabled
 
     _HAS_HOMEASSISTANT = True
 except ImportError:
@@ -180,6 +180,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except KeyError:
             pass  # unknown type -> coordinator disables the brew panel
     coordinator = JuraCoordinator(hass, entry)
+    if clock_sync_enabled(entry):
+        await coordinator.async_load_clock_last_check()
+    if automatic_clock_sync_enabled(entry):
+        await coordinator.async_load_clock_auto_state()
     await coordinator.async_config_entry_first_refresh()
     # Restore persisted per-product brew preferences,
     # keyed by product Code, so the brew panel remembers them across restarts.
@@ -195,6 +199,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # entry.options on the next entity state write, but a reload guarantees
     # every entity reflects it immediately.
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+    if automatic_clock_sync_enabled(entry):
+        entry.async_on_unload(coordinator.async_add_listener(coordinator.maybe_auto_clock_sync))
+        coordinator.maybe_auto_clock_sync()
 
     return True
 
@@ -205,6 +212,8 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Tear down a Jura config entry."""
+    coordinator = _get_coordinator(hass, entry.entry_id)
+    await coordinator.async_cancel_clock_sync()
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)

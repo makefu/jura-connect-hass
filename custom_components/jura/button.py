@@ -1,4 +1,4 @@
-"""Button platform: a single "Brew" button driving the brew control panel.
+"""Buttons for brewing and optional manual clock synchronization.
 
 Pressing the button PHYSICALLY brews a drink. It reads the machine-wide
 ``coordinator.brew_selection`` (product plus optional recipe parameters staged
@@ -15,6 +15,7 @@ import logging
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from jura_connect import (
@@ -27,7 +28,7 @@ from jura_connect import (
 )
 
 from .const import DOMAIN
-from .coordinator import JuraCoordinator
+from .coordinator import JuraCoordinator, clock_sync_enabled
 from .entity import JuraEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -49,6 +50,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: JuraCoordinator = hass.data[DOMAIN][config_entry.entry_id]
+    if clock_sync_enabled(config_entry):
+        async_add_entities([JuraClockSyncButton(coordinator, config_entry)])
     # No product table (missing jura_connect data / unknown machine type) ->
     # nothing brewable, so no button. Mirrors the select/number platforms.
     profile = coordinator.brew_profile
@@ -93,3 +96,22 @@ class JuraBrewButton(JuraEntity, ButtonEntity):
                 overrides[kind] = value
         recipe = product.build_recipe_hex(overrides)
         await self.coordinator.run_brew(recipe)
+
+
+class JuraClockSyncButton(JuraEntity, ButtonEntity):
+    """Start one clock verification and, if needed, correction."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "clock_sync"
+    _attr_icon = "mdi:clock-sync-outline"
+
+    def __init__(self, coordinator: JuraCoordinator, config_entry: ConfigEntry) -> None:
+        super().__init__(coordinator, config_entry)
+        self._attr_unique_id = f"{DOMAIN}_{self._slug}_clock_sync"
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.clock_sync_available
+
+    async def async_press(self) -> None:
+        self.coordinator.start_clock_sync()

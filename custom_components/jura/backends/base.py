@@ -13,6 +13,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..clock import ClockReading, ClockReference, ClockUpdate
+
 
 @dataclass(frozen=True)
 class MachineSnapshot:
@@ -81,8 +83,18 @@ class JuraAuthError(JuraBackendError):
     """Pairing / handshake rejected by the machine (re-auth required)."""
 
 
+class ClockWriteUnverified(JuraBackendError):
+    """The clock may have been written; no automatic retry is safe."""
+
+
 class JuraBackend(ABC):
     """Async-facing protocol used by the coordinator and config flow."""
+
+    async def start_clock_sync(self, reference: ClockReference) -> ClockUpdate:
+        raise JuraBackendError("This backend does not support JURA clock synchronization")
+
+    async def read_clock(self, reference: ClockReference) -> ClockReading:
+        raise JuraBackendError("This backend does not support JURA clock verification")
 
     @abstractmethod
     async def pair(self, on_prompt: Callable[[str], None] | None = None) -> str:

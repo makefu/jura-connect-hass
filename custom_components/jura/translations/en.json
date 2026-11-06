@@ -66,7 +66,11 @@
                 "data": {
                     "retain_when_offline": "Retain last values when offline",
                     "session_cooldown_seconds": "Quiet period between sessions (seconds)",
-                    "brew_follow_seconds": "Follow brew progress up to (seconds)"
+                    "brew_follow_seconds": "Follow brew progress up to (seconds)",
+                    "weekday_timers": "Weekday switch-on timers (GIGA 6)"
+                },
+                "data_description": {
+                    "weekday_timers": "EF566 test feature. Verify the weekday mapping on the machine before regular use."
                 }
             }
         }
@@ -327,6 +331,52 @@
         "number": {
             "setting": {
                 "name": "Setting {setting}"
+            }
+        },
+        "time": {
+            "weekday_timer_monday": {
+                "name": "Timer 1: Monday Time"
+            },
+            "weekday_timer_tuesday": {
+                "name": "Timer 2: Tuesday Time"
+            },
+            "weekday_timer_wednesday": {
+                "name": "Timer 3: Wednesday Time"
+            },
+            "weekday_timer_thursday": {
+                "name": "Timer 4: Thursday Time"
+            },
+            "weekday_timer_friday": {
+                "name": "Timer 5: Friday Time"
+            },
+            "weekday_timer_saturday": {
+                "name": "Timer 6: Saturday Time"
+            },
+            "weekday_timer_sunday": {
+                "name": "Timer 7: Sunday Time"
+            }
+        },
+        "switch": {
+            "weekday_timer_monday": {
+                "name": "Timer 1: Monday"
+            },
+            "weekday_timer_tuesday": {
+                "name": "Timer 2: Tuesday"
+            },
+            "weekday_timer_wednesday": {
+                "name": "Timer 3: Wednesday"
+            },
+            "weekday_timer_thursday": {
+                "name": "Timer 4: Thursday"
+            },
+            "weekday_timer_friday": {
+                "name": "Timer 5: Friday"
+            },
+            "weekday_timer_saturday": {
+                "name": "Timer 6: Saturday"
+            },
+            "weekday_timer_sunday": {
+                "name": "Timer 7: Sunday"
             }
         }
     }

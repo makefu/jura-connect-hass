@@ -192,6 +192,7 @@ async def test_async_setup_entry_prewarms_profile_off_event_loop(monkeypatch):
     hass.config_entries.async_forward_entry_setups = AsyncMock()
 
     coordinator = MagicMock()
+    coordinator.timers_enabled = False
     coordinator.async_config_entry_first_refresh = AsyncMock()
     coordinator.async_load_brew_prefs = AsyncMock()
     monkeypatch.setattr(jura, "JuraCoordinator", lambda *a, **k: coordinator)
@@ -231,6 +232,7 @@ async def test_async_setup_entry_skips_prewarm_without_machine_type(monkeypatch)
     hass.config_entries.async_forward_entry_setups = AsyncMock()
 
     coordinator = MagicMock()
+    coordinator.timers_enabled = False
     coordinator.async_config_entry_first_refresh = AsyncMock()
     coordinator.async_load_brew_prefs = AsyncMock()
     monkeypatch.setattr(jura, "JuraCoordinator", lambda *a, **k: coordinator)

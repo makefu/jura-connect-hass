@@ -6,15 +6,17 @@ import asyncio
 import dataclasses
 import errno
 import logging
+import re
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from datetime import time as local_time
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from jura_connect import MachineProfile, ProductDef, load_profile
@@ -35,6 +37,8 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
+
+from .timers import CONF_WEEKDAY_TIMERS, TIMER_MODEL, TIMER_SLOTS, WEEKDAY_SLOTS, TimerAction, TimerSlot, timer_minute
 
 # Narrow seam so cooldown tests can fake sleeping without proxying asyncio.
 _sleep = asyncio.sleep
@@ -127,6 +131,12 @@ def _is_offline_error(err: BaseException) -> bool:
     return any(hint in text for hint in _OFFLINE_MESSAGE_HINTS)
 
 
+def weekday_timers_enabled(entry: ConfigEntry) -> bool:
+    """Require explicit opt-in on the hardware-tested GIGA 6 profile."""
+    options = getattr(entry, "options", None) or {}
+    return entry.data.get(CONF_MACHINE_TYPE) == TIMER_MODEL and options.get(CONF_WEEKDAY_TIMERS) is True
+
+
 class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
     """Polls one Jura machine and serves snapshots to entities."""
 
@@ -189,6 +199,11 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
         # written back (debounced) by ``save_brew_prefs``.
         self.brew_prefs: dict[str, dict[str, int | None]] = {}
         self._brew_prefs_store: Store | None = None
+        # ConfigEntry.options can already contain the new options when the old
+        # coordinator is unloaded. Keep the platforms for this setup stable.
+        self.timers_enabled = weekday_timers_enabled(config_entry)
+        self.timer_times: dict[str, local_time] = {}
+        self._timer_times_store: Store | None = None
         # Serialise all machine I/O (polls + commands + setting writes) so the
         # coordinator never opens a second TCP session while one is in flight —
         # the dongle only serves one at a time. The lock also covers the quiet
@@ -263,6 +278,89 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
         if code is not None:
             self.brew_selection.update(selection_for_product(self.brew_prefs, str(code)))
 
+    async def async_load_timer_times(self) -> None:
+        """Restore staged switch-on times without writing to the machine."""
+        if not self.timers_enabled:
+            return
+        self._timer_times_store = Store(self.hass, 1, f"{DOMAIN}.timer_times.{self.config_entry.entry_id}")
+        data = await self._timer_times_store.async_load()
+        if not isinstance(data, dict):
+            return
+        for slot in WEEKDAY_SLOTS.values():
+            raw = data.get(slot)
+            if isinstance(raw, str) and re.fullmatch(r"[0-9]{2}:[0-9]{2}", raw):
+                try:
+                    self.timer_times[slot] = local_time.fromisoformat(raw)
+                except ValueError:
+                    pass
+
+    async def _remember_timer_times(
+        self, slots: dict[str, TimerSlot], staged: tuple[str, local_time] | None = None
+    ) -> None:
+        observed = {
+            slot: value.on for slot, value in slots.items() if slot in WEEKDAY_SLOTS.values() and value.on is not None
+        }
+        if staged is not None:
+            observed[staged[0]] = staged[1]
+        if any(self.timer_times.get(slot) != value for slot, value in observed.items()):
+            self.timer_times.update(observed)
+            if self._timer_times_store is not None:
+                await self._timer_times_store.async_save(
+                    {slot: value.isoformat(timespec="minutes") for slot, value in self.timer_times.items()}
+                )
+
+    @property
+    def weekday_timers_available(self) -> bool:
+        snapshot = self.data
+        return bool(
+            self.timers_enabled
+            and self.last_poll_success
+            and self.last_update_success
+            and snapshot is not None
+            and snapshot.handshake_state == "CORRECT"
+            and snapshot.timers.keys() == set(TIMER_SLOTS)
+        )
+
+    async def update_weekday_timer(self, slot: str, action: TimerAction, value: local_time | None = None) -> None:
+        """Apply one requested operation against a fresh timer block."""
+        if slot not in WEEKDAY_SLOTS.values() or action not in ("set_time", "enable", "disable"):
+            raise HomeAssistantError("Invalid JURA weekday timer operation")
+        if action == "set_time":
+            if value is None:
+                raise HomeAssistantError("Select a switch-on time")
+            try:
+                timer_minute(value)
+            except ValueError as err:
+                raise HomeAssistantError(str(err)) from err
+        async with self._machine_session():
+            # Recheck after any queued poll, write or cooldown.
+            if not self.weekday_timers_available:
+                raise HomeAssistantError("JURA weekday timers are currently unavailable")
+            if action == "enable":
+                value = self.timer_times.get(slot)
+                if value is None:
+                    raise HomeAssistantError("Set a switch-on time before enabling this timer")
+            try:
+                result = await self.backend.update_timer(slot, action, value)
+            except (JuraBackendError, asyncio.CancelledError) as err:
+                # A failed or interrupted write may have reached the machine.
+                # Hide stale controls until a poll obtains a fresh block.
+                if self.data is not None:
+                    self.async_set_updated_data(dataclasses.replace(self.data, timers={}))
+                if isinstance(err, asyncio.CancelledError):
+                    raise
+                if isinstance(err, JuraAuthError):
+                    raise ConfigEntryAuthFailed(f"authentication failed: {err}") from err
+                raise HomeAssistantError(str(err)) from err
+            staged = None
+            if result.slots[slot].on is None:
+                remembered = value if action == "set_time" else result.previous_on
+                if remembered is not None:
+                    staged = (slot, remembered)
+            await self._remember_timer_times(result.slots, staged)
+            if self.data is not None:
+                self.async_set_updated_data(dataclasses.replace(self.data, timers=result.slots))
+
     async def save_brew_prefs(self) -> None:
         """Schedule a debounced write of ``brew_prefs`` to disk.
 
@@ -310,6 +408,7 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
             conn_id=data[CONF_CONN_ID],
             auth_hash=data.get(CONF_AUTH_HASH, ""),
             machine_type=data.get(CONF_MACHINE_TYPE),
+            weekday_timers=weekday_timers_enabled(config_entry),
         )
 
     def _offline_snapshot(self) -> MachineSnapshot:
@@ -358,6 +457,7 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
         try:
             async with self._machine_session():
                 snapshot = await self.backend.fetch()
+                await self._remember_timer_times(snapshot.timers)
         except JuraAuthError as err:
             self.last_poll_success = False
             raise ConfigEntryAuthFailed(f"authentication failed: {err}") from err

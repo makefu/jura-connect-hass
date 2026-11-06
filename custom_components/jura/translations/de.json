@@ -256,6 +256,64 @@
             "setting": {
                 "name": "Einstellung {setting}"
             }
+        },
+        "time": {
+            "weekday_timer_monday": {
+                "name": "Timer 1: Zeit Montag"
+            },
+            "weekday_timer_tuesday": {
+                "name": "Timer 2: Zeit Dienstag"
+            },
+            "weekday_timer_wednesday": {
+                "name": "Timer 3: Zeit Mittwoch"
+            },
+            "weekday_timer_thursday": {
+                "name": "Timer 4: Zeit Donnerstag"
+            },
+            "weekday_timer_friday": {
+                "name": "Timer 5: Zeit Freitag"
+            },
+            "weekday_timer_saturday": {
+                "name": "Timer 6: Zeit Samstag"
+            },
+            "weekday_timer_sunday": {
+                "name": "Timer 7: Zeit Sonntag"
+            }
+        },
+        "switch": {
+            "weekday_timer_monday": {
+                "name": "Timer 1: Montag"
+            },
+            "weekday_timer_tuesday": {
+                "name": "Timer 2: Dienstag"
+            },
+            "weekday_timer_wednesday": {
+                "name": "Timer 3: Mittwoch"
+            },
+            "weekday_timer_thursday": {
+                "name": "Timer 4: Donnerstag"
+            },
+            "weekday_timer_friday": {
+                "name": "Timer 5: Freitag"
+            },
+            "weekday_timer_saturday": {
+                "name": "Timer 6: Samstag"
+            },
+            "weekday_timer_sunday": {
+                "name": "Timer 7: Sonntag"
+            }
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "weekday_timers": "Wochen-Einschalttimer (GIGA 6)"
+                },
+                "data_description": {
+                    "weekday_timers": "Testfunktion für EF566. Vor der regulären Nutzung die Zuordnung der Wochentage am Gerät prüfen."
+                }
+            }
         }
     }
 }

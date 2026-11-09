@@ -4,7 +4,7 @@ All notable changes to this integration are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.2] - 2026-11-03
+## [1.5.2] - 2026-11-09
 
 ### Fixed
 
@@ -24,6 +24,22 @@ version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `blocked_products`. The Coffee Button decides per drink from them
     (the HA Brew button's availability reflects the brew panel's product,
     not the tile's) and translates the common machine states itself.
+
+- A brew that had to wait for the `@TP:` ACK or the start probe was
+  followed for a shorter window than configured: the deadline was
+  computed before both waits, so with a small *brew follow seconds*
+  option a still-running dispense could be reported finished after a
+  single frame. The window now starts at the first progress frame.
+- The status sensor listed `blocked_products` even while the machine was
+  offline — a stale claim the cards read as current — and never exposed
+  the alerts behind them; both are gated on reachability now.
+- Card registration is retryable: a failed setup no longer marks the
+  cards as done (they stayed missing until a restart), and dashboard
+  resources for cards that were renamed or dropped in an update are
+  removed instead of 404-ing in every dashboard.
+- Coffee Button: detached tiles stopped their retry and phase timers
+  (no more polling a removed card), and a failed `ha-form` or machine
+  fetch no longer poisons the shared cache until reload.
 
 ## [1.5.1] - 2026-11-03
 

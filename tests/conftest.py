@@ -259,29 +259,9 @@ class DeviceEntryType:
     SERVICE = "service"
 
 
-class _DeviceEntry:
-    def __init__(self, device_id: str):
-        self.id = device_id
-
-
-class _DeviceRegistry:
-    def __init__(self):
-        self._devices: dict[frozenset, _DeviceEntry] = {}
-
-    def async_get_device(self, identifiers=None, connections=None) -> _DeviceEntry | None:
-        return self._devices.get(frozenset(identifiers or ()))
-
-    def add(self, identifiers, device_id: str) -> None:
-        self._devices[frozenset(identifiers)] = _DeviceEntry(device_id)
-
-
-_device_registry_instance = _DeviceRegistry()
-
-
 _make_module(
     "homeassistant.helpers.device_registry",
     DeviceEntryType=DeviceEntryType,
-    async_get=lambda hass: _device_registry_instance,
 )
 
 
@@ -316,6 +296,14 @@ class _EntityRegistry:
 
 
 _entity_registry_instance = _EntityRegistry()
+
+
+@pytest.fixture(autouse=True)
+def _clear_entity_registry():
+    """The stub registry is a process singleton; don't leak registrations."""
+    _entity_registry_instance._entries.clear()
+    _entity_registry_instance._unique_ids.clear()
+    yield
 
 
 def _er_async_get(hass):

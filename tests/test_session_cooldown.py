@@ -16,6 +16,7 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.jura import coordinator as coordinator_module
 from custom_components.jura.backends.base import JuraBackendError
+from custom_components.jura.const import BREW_START_TIMEOUT
 from custom_components.jura.coordinator import JuraCoordinator
 
 
@@ -118,8 +119,18 @@ async def test_elapsed_gap_does_not_sleep_again(mock_backend, fake_config_entry,
     assert coordinator._last_session_end == 100.0
 
 
-@pytest.mark.parametrize("pathway", ["fetch", "run_named", "follow_brew", "write_setting"])
-async def test_error_stamps_end_and_is_never_retried(mock_backend, fake_config_entry, session_clock, pathway):
+@pytest.mark.parametrize(
+    ("pathway", "expected"),
+    [
+        ("fetch", UpdateFailed),
+        ("run_named", UpdateFailed),
+        # Brew failures must stay *translated*: a raw backend error here means
+        # the HomeAssistantError mapping in run_brew regressed.
+        ("follow_brew", HomeAssistantError),
+        ("write_setting", UpdateFailed),
+    ],
+)
+async def test_error_stamps_end_and_is_never_retried(mock_backend, fake_config_entry, session_clock, pathway, expected):
     coordinator = make_coordinator(mock_backend, fake_config_entry)
     operation = getattr(mock_backend, pathway)
 
@@ -128,8 +139,7 @@ async def test_error_stamps_end_and_is_never_retried(mock_backend, fake_config_e
         raise JuraBackendError("invalid transport response")
 
     operation.side_effect = fail
-    # Brews surface failures as translated HomeAssistantError.
-    with pytest.raises((UpdateFailed, JuraBackendError, HomeAssistantError)):
+    with pytest.raises(expected):
         await invoke(coordinator, pathway)
     assert operation.await_count == 1
     assert coordinator._last_session_end == 102.0
@@ -271,7 +281,9 @@ async def test_brew_follow_seconds_option_reaches_backend(mock_backend, fake_con
 
     await coordinator.run_brew("mock-recipe")
 
-    mock_backend.follow_brew.assert_awaited_once_with("mock-recipe", follow_seconds=45.0, start_timeout=30.0)
+    mock_backend.follow_brew.assert_awaited_once_with(
+        "mock-recipe", follow_seconds=45.0, start_timeout=BREW_START_TIMEOUT
+    )
 
 
 def test_entry_seconds_precedence(fake_config_entry):

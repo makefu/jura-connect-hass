@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from custom_components.jura.backends.base import JuraAuthError, JuraBackendError
+from custom_components.jura.const import BREW_START_TIMEOUT
 from custom_components.jura.coordinator import (
     HANDSHAKE_STATE_OFFLINE,
     OFFLINE_TOLERANCE,
@@ -289,8 +290,7 @@ async def test_run_brew_refreshes_and_publishes_last_progress_frame(mock_backend
     result = await coordinator.run_brew("01020304")
 
     assert result["ack"] == "@tp"
-    mock_backend.follow_brew.assert_awaited_once_with("01020304", follow_seconds=120.0, start_timeout=30.0)
-    # The refresh ran, then the last frame landed in data.progress.
+    mock_backend.follow_brew.assert_awaited_once_with("01020304", follow_seconds=120.0, start_timeout=BREW_START_TIMEOUT)
     mock_backend.fetch.assert_awaited()
     assert coordinator.data.progress == {"state": "GRINDING_COFFEE", "percent": 30}
 

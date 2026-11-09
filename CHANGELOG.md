@@ -107,7 +107,9 @@ version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Manifest dependency on `lovelace` (for the resource registration).
+- Manifest dependencies on `frontend`, `http`, `lovelace`, and `websocket_api`
+  (serving the card assets, registering the Lovelace resource, and the
+  `jura/machines` websocket command).
 
 ## [1.4.1] - 2026-11-03
 

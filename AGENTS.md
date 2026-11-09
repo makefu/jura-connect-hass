@@ -38,6 +38,7 @@ tests/
   test_services.py
   test_serializers.py
   test_lovelace.py
+  test_offline_brew.py     # brew gating: offline/not-ready machines reported, not tried blindly
   test_brew_card.mjs           # node --test tests/*.mjs (dashboard cards)
   test_coffee_button_card.mjs
   test_card_compat.mjs         # legacy frontend / old WebView compatibility

@@ -147,7 +147,15 @@
               }
               ''
                 cd ${self}
-                node --test tests/*.mjs
+                # An empty glob would make `node --test` exit 0, passing the
+                # check without running any card test.
+                shopt -s nullglob
+                set -- tests/*.mjs
+                if [ "$#" -eq 0 ]; then
+                  echo "error: no tests/*.mjs found" >&2
+                  exit 1
+                fi
+                node --test "$@"
                 touch $out
               '';
         }

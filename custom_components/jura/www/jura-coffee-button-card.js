@@ -219,13 +219,17 @@
   let machinesPromise = null;
   function fetchMachines(hass, force = false) {
     if (!machinesPromise || force) {
-      machinesPromise = hass.callWS({ type: "jura/machines" }).then(
+      const pending = hass.callWS({ type: "jura/machines" }).then(
         (res) => (res && res.machines) || [],
         (err) => {
-          machinesPromise = null; // retry on the next render
+          // Retry on the next render -- but only drop the cache when this is
+          // still the cached request: a superseded forced fetch must not
+          // discard a fresher result.
+          if (machinesPromise === pending) machinesPromise = null;
           throw err;
         },
       );
+      machinesPromise = pending;
     }
     return machinesPromise;
   }
@@ -358,7 +362,7 @@
           // Machine still starting up (setup retry): look again shortly, so
           // the tile turns live without a page reload once it is reachable.
           const machine = resolveMachine(machines, this._config || {});
-          if (machine && machine.state && machine.state !== "loaded") {
+          if (machine && machine.state && machine.state !== "loaded" && !this._disconnected) {
             clearTimeout(this._retryTimer);
             this._retryTimer = setTimeout(() => {
               fetchMachines(this._hass, true).catch(() => {});
@@ -368,14 +372,35 @@
         })
         .catch((err) => {
           this._loadError = (err && err.message) || `${err}`;
-          // Integration still starting (or reloading): try again shortly.
-          clearTimeout(this._retryTimer);
-          this._retryTimer = setTimeout(() => this._load(), 30000);
+          // Integration still starting (or reloading): try again shortly --
+          // but never re-arm for a card that was removed in the meantime.
+          if (!this._disconnected) {
+            clearTimeout(this._retryTimer);
+            this._retryTimer = setTimeout(() => this._load(), 30000);
+          }
         })
         .finally(() => {
           this._loading = false;
           this._render();
         });
+    }
+
+    // Detached cards must stop polling: the 30 s machine-state retry and the
+    // transient phase timers would otherwise keep firing forever and retain
+    // the hass reference through their closures. Own flag, not isConnected:
+    // that is a getter-only Element accessor a classic script cannot set.
+    disconnectedCallback() {
+      this._disconnected = true;
+      clearTimeout(this._retryTimer);
+      this._retryTimer = null;
+      clearTimeout(this._phaseTimer);
+      this._phaseTimer = null;
+    }
+
+    connectedCallback() {
+      // Grid edits detach/re-append the same element; allow this instance to
+      // arm retries again.
+      this._disconnected = false;
     }
 
     _build() {
@@ -770,7 +795,7 @@
   function ensureHaForm() {
     if (customElements.get("ha-form")) return Promise.resolve();
     if (!haFormPromise) {
-      haFormPromise = (async () => {
+      const pending = (async () => {
         const helpers = window.loadCardHelpers ? await window.loadCardHelpers() : undefined;
         if (helpers) {
           const card = await helpers.createCardElement({ type: "button", entity: "sun.sun" });
@@ -778,6 +803,18 @@
         }
         await customElements.whenDefined("ha-form");
       })();
+      // A failed load must not be memoized forever: clear the cache (for this
+      // and only this request) so a later editor retries instead of reusing a
+      // dead promise and staying permanently blank.
+      pending.then(
+        () => {
+          if (haFormPromise === pending) haFormPromise = null;
+        },
+        () => {
+          if (haFormPromise === pending) haFormPromise = null;
+        },
+      );
+      haFormPromise = pending;
     }
     return haFormPromise;
   }
@@ -807,11 +844,31 @@
             this._ensureProduct();
             this._render();
           });
-        ensureHaForm()
-          .then(() => this._render())
-          .catch(() => {});
+        this._loadHaForm();
       }
       if (this._form) this._form.hass = hass;
+      else this._render();
+    }
+
+    // Render once ha-form exists; retry on a bounded backoff after a failed
+    // load (transient network hiccup) so the editor is not blank forever.
+    _loadHaForm() {
+      ensureHaForm()
+        .then(() => this._render())
+        .catch(() => {
+          if (this._disconnected || this._haFormTimer) return;
+          if ((this._haFormTries = (this._haFormTries || 0) + 1) > 3) return;
+          this._haFormTimer = setTimeout(() => {
+            this._haFormTimer = null;
+            this._loadHaForm();
+          }, 2000);
+        });
+    }
+
+    disconnectedCallback() {
+      this._disconnected = true;
+      clearTimeout(this._haFormTimer);
+      this._haFormTimer = null;
     }
 
     // Make a card without a (known) drink concrete: write the machine's first

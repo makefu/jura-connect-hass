@@ -40,23 +40,48 @@ class FakeHTMLElement {
   appendChild(child) { (this.children ??= []).push(child); }
 }
 
-function load({ haForm = true, window = {} } = {}) {
+// Records setTimeout/clearTimeout calls so tests can inspect and fire timers.
+function makeTimers() {
+  const live = [];
+  let seq = 0;
+  return {
+    set: (fn, ms) => { const id = ++seq; live.push({ id, fn, ms, cleared: false }); return id; },
+    clear: (id) => { const t = live.find((x) => x.id === id); if (t) t.cleared = true; },
+    armed: () => live.filter((t) => !t.cleared),
+    fire: () => { const due = live.filter((t) => !t.cleared); due.forEach((t) => { t.cleared = true; t.fn(); }); },
+  };
+}
+
+const drain = () => new Promise((r) => setImmediate(r));
+
+function load({ haForm = true, window = {}, timers = null } = {}) {
   const defined = {};
   const module = { exports: {} };
   const created = [];
+  // Mutable so tests can make <ha-form> appear after the card loaded.
+  const state = { haForm };
+  const waiters = {};
+  const defineHaForm = () => {
+    state.haForm = true;
+    (waiters["ha-form"] || []).forEach((r) => r());
+    waiters["ha-form"] = [];
+  };
   const sandbox = {
     HTMLElement: FakeHTMLElement,
     CustomEvent: class { constructor(type, init) { this.type = type; Object.assign(this, init); } },
     document: { createElement: (tag) => { const el = new FakeEl(); el.tag = tag; created.push(el); return el; } },
     customElements: {
-      get: (n) => (n === "ha-form" ? (haForm ? class {} : undefined) : defined[n]),
-      define: (n, cls) => { defined[n] = cls; },
-      whenDefined: async () => {},
+      get: (n) => (n === "ha-form" ? (state.haForm ? class {} : defined[n]) : defined[n]),
+      define: (n, cls) => { defined[n] = cls; (waiters[n] || []).forEach((r) => r()); waiters[n] = []; },
+      whenDefined: (n) =>
+        n === "ha-form" && state.haForm
+          ? Promise.resolve()
+          : new Promise((res) => { (waiters[n] ??= []).push(res); }),
     },
     window,
     console: { info() {}, warn() {} },
-    setTimeout: () => 0,
-    clearTimeout: () => {},
+    setTimeout: timers ? timers.set : () => 0,
+    clearTimeout: timers ? timers.clear : () => {},
     module,
   };
   vm.runInNewContext(src, sandbox, { filename: "jura-coffee-button-card.js" });
@@ -66,6 +91,7 @@ function load({ haForm = true, window = {} } = {}) {
     api: module.exports,
     window: sandbox.window,
     created,
+    defineHaForm,
   };
 }
 
@@ -503,4 +529,132 @@ test("a brew running elsewhere blocks via the status sensor too", async () => {
   const h = hass(statusWith("coffee_ready", { brew_ready: false, brewing: true }));
   const { root } = await rendered({ product: "espresso" }, h);
   assert.equal(root.querySelector("button").disabled, true);
+});
+
+// --- Detach lifecycle / timer hygiene ---------------------------------------
+// Regression: navigating away left detached tiles re-fetching jura/machines
+// every 30 s forever (and holding their hass reference via the closure).
+
+test("disconnect clears the retry and phase timers; nothing fires afterwards", async () => {
+  const timers = makeTimers();
+  const starting = { ...MACHINE, state: "setup_retry" };
+  const { Card } = load({ timers });
+  const card = new Card();
+  card.setConfig({ product: "espresso" });
+  const h = hass(undefined, { machines: [starting] });
+  const wsCalls = [];
+  const callWS = h.callWS;
+  h.callWS = (msg) => { wsCalls.push(msg); return callWS(msg); };
+  card.hass = h;
+  // Arm a transient phase timer next to the 30 s state poll. (A real confirm
+  // tap would be blocked here: the machine is offline while starting up.)
+  card._setPhase("confirm", 3000);
+  await drain();
+  assert.deepEqual(timers.armed().map((t) => t.ms).sort((a, b) => a - b), [3000, 30000]);
+
+  card.disconnectedCallback();
+  assert.equal(card._retryTimer, null);
+  assert.equal(card._phaseTimer, null);
+  assert.deepEqual(timers.armed(), []);
+
+  timers.fire(); // the "30 s" poll must be gone
+  await drain();
+  assert.equal(wsCalls.length, 1, "only the initial load fetched");
+});
+
+test("an in-flight fetch resolving after disconnect does not re-arm polling", async () => {
+  const timers = makeTimers();
+  const starting = { ...MACHINE, state: "setup_retry" };
+  const { Card } = load({ timers });
+  const card = new Card();
+  card.setConfig({ product: "espresso" });
+  let release;
+  const h = hass();
+  h.callWS = () => new Promise((r) => { release = r; });
+  card.hass = h;
+  await drain();
+  card.disconnectedCallback();
+  release({ machines: [starting] });
+  await drain();
+  assert.deepEqual(timers.armed(), [], "detached card must not arm the 30 s retry");
+});
+
+// --- ha-form availability -----------------------------------------------------
+// Regression: a rejected loadCardHelpers() stayed memoized, so every later
+// editor reused the dead promise and the visual editor was permanently blank.
+
+test("ensureHaForm does not memoize a rejected load", async () => {
+  let attempts = 0;
+  const window = {
+    loadCardHelpers: async () => {
+      attempts += 1;
+      if (attempts <= 2) throw new Error("chunk load failed");
+      return { createCardElement: async () => ({ constructor: { getConfigElement: async () => {} } }) };
+    },
+  };
+  const env = load({ haForm: false, window });
+  await assert.rejects(env.api.ensureHaForm());
+  await assert.rejects(env.api.ensureHaForm()); // must retry, not reuse the dead promise
+  assert.equal(attempts, 2);
+  env.defineHaForm();
+  await env.api.ensureHaForm();
+  await env.api.ensureHaForm();
+  assert.equal(attempts, 2, "no reload once ha-form is defined");
+});
+
+test("editor retries a failed ha-form load and renders once it exists", async () => {
+  let attempts = 0;
+  const window = {
+    loadCardHelpers: async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("chunk load failed");
+      return { createCardElement: async () => ({ constructor: { getConfigElement: async () => {} } }) };
+    },
+  };
+  const timers = makeTimers();
+  const env = load({ haForm: false, window, timers });
+  const editor = new env.Editor();
+  editor.hass = hass();
+  editor.setConfig({ product: "espresso" });
+  await drain();
+  assert.equal(attempts, 1, "first attempt rejected");
+  assert.equal(timers.armed().length, 1, "backoff timer armed");
+  assert.equal(editor._form, undefined, "blank until ha-form exists");
+
+  timers.fire(); // backoff expiry -> retry; it now hangs on whenDefined("ha-form")
+  await drain();
+  assert.equal(attempts, 2, "retry ran");
+
+  // A built-in editor defines ha-form later; the open editor must fill itself in.
+  env.defineHaForm();
+  await drain();
+  const form = env.created.find((el) => el.tag === "ha-form");
+  assert.ok(form, "ha-form rendered after the element became available");
+  assert.equal(form.schema[0].name, "product");
+});
+
+test("editor stops retrying ha-form after the cap and on disconnect", async () => {
+  const window = { loadCardHelpers: async () => { throw new Error("offline"); } };
+  const timers = makeTimers();
+  const env = load({ haForm: false, window, timers });
+  const editor = new env.Editor();
+  editor.hass = hass();
+  editor.setConfig({});
+  await drain();
+  for (let i = 0; i < 10; i += 1) {
+    timers.fire();
+    await drain();
+  }
+  assert.ok(timers.armed().length <= 1, "retry chain is bounded");
+
+  const timers2 = makeTimers();
+  const env2 = load({ haForm: false, window, timers: timers2 });
+  const editor2 = new env2.Editor();
+  editor2.hass = hass();
+  editor2.setConfig({});
+  await drain();
+  assert.equal(timers2.armed().length, 1, "backoff armed before disconnect");
+  editor2.disconnectedCallback();
+  assert.equal(editor2._haFormTimer, null);
+  assert.deepEqual(timers2.armed(), [], "disconnect clears the pending retry");
 });

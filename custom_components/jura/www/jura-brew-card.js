@@ -43,8 +43,6 @@
 // Wall Display) loads cards as classic scripts that share one global scope,
 // where both Jura cards' top-level names (ATTENTION, statusMood, …) collide.
 (function () {
-  // The backend prepends this sentinel as option[0] on every parameter select.
-  const FACTORY_DEFAULT = "factory_default";
   const FACTORY_DEFAULT_LABEL = "Factory Default";
 
   const PARAM_ROWS = [

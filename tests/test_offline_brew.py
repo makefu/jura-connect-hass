@@ -146,7 +146,6 @@ def test_profile_block_alerts_stop_brewing(sample_snapshot, alert):
     assert JuraBrewButton(coordinator, coordinator.config_entry).available is False
 
 
-
 # --- not ready / already brewing (machine heating up after power-on) ---------
 # Regression: the Brew button was enabled while the machine heated up. The
 # machine ACKed the recipe and never brewed; the integration followed that

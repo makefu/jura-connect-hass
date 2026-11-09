@@ -290,7 +290,9 @@ async def test_run_brew_refreshes_and_publishes_last_progress_frame(mock_backend
     result = await coordinator.run_brew("01020304")
 
     assert result["ack"] == "@tp"
-    mock_backend.follow_brew.assert_awaited_once_with("01020304", follow_seconds=120.0, start_timeout=BREW_START_TIMEOUT)
+    mock_backend.follow_brew.assert_awaited_once_with(
+        "01020304", follow_seconds=120.0, start_timeout=BREW_START_TIMEOUT
+    )
     mock_backend.fetch.assert_awaited()
     assert coordinator.data.progress == {"state": "GRINDING_COFFEE", "percent": 30}
 

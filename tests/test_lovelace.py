@@ -10,11 +10,11 @@ import pytest
 
 jura_connect = pytest.importorskip("jura_connect")
 
-from homeassistant.helpers import entity_registry as er
-from jura_connect import load_profile
+from homeassistant.helpers import entity_registry as er  # noqa: E402
+from jura_connect import load_profile  # noqa: E402
 
-from custom_components.jura import lovelace
-from custom_components.jura.const import CONF_CONN_ID, CONF_MACHINE_TYPE, DOMAIN
+from custom_components.jura import lovelace  # noqa: E402
+from custom_components.jura.const import CONF_CONN_ID, CONF_MACHINE_TYPE, DOMAIN  # noqa: E402
 
 _PROFILE = load_profile("EF1091")
 

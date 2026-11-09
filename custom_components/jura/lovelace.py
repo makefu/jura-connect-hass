@@ -79,33 +79,34 @@ async def async_setup_lovelace(hass: HomeAssistant) -> None:
     """
     if hass.data.get(DATA_LOVELACE):
         return
-    hass.data[DATA_LOVELACE] = True
-
-    websocket_api.async_register_command(hass, ws_machines)
-
     try:
+        websocket_api.async_register_command(hass, ws_machines)
         files = [name for name in CARD_FILES if (WWW_DIR / name).is_file()]
-        if not files:
+        if files:
+            hashes = {name: await hass.async_add_executor_job(_file_hash, WWW_DIR / name) for name in files}
+            # Cache headers on: the ?v=<hash> query changes with every card
+            # change, and slow clients (wall displays, phone apps) must not
+            # re-download the cards on every reload.
+            await hass.http.async_register_static_paths(
+                [StaticPathConfig(f"{URL_BASE}/{name}", str(WWW_DIR / name), True) for name in files]
+            )
+            urls = {f"{URL_BASE}/{name}": f"{URL_BASE}/{name}?v={hashes[name]}" for name in files}
+            if not await _async_register_resources(hass, urls):
+                # Resources managed in YAML: extra script tags for both frontend
+                # builds. Older WebViews (Shelly Wall Display, old tablets) get the
+                # legacy build, which only loads the es5 list.
+                for url in urls.values():
+                    add_extra_js_url(hass, url)
+                    add_extra_js_url(hass, url, es5=True)
+        else:
             _LOGGER.warning("Jura dashboard cards missing in %s; is the integration installed completely?", WWW_DIR)
-            return
-        hashes = {name: await hass.async_add_executor_job(_file_hash, WWW_DIR / name) for name in files}
-        # Cache headers on: the ?v=<hash> query changes with every card
-        # change, and slow clients (wall displays, phone apps) must not
-        # re-download the cards on every reload.
-        await hass.http.async_register_static_paths(
-            [StaticPathConfig(f"{URL_BASE}/{name}", str(WWW_DIR / name), True) for name in files]
-        )
-        urls = {f"{URL_BASE}/{name}": f"{URL_BASE}/{name}?v={hashes[name]}" for name in files}
-        if await _async_register_resources(hass, urls):
-            return
-        # Resources managed in YAML: extra script tags for both frontend
-        # builds. Older WebViews (Shelly Wall Display, old tablets) get the
-        # legacy build, which only loads the es5 list.
-        for url in urls.values():
-            add_extra_js_url(hass, url)
-            add_extra_js_url(hass, url, es5=True)
     except Exception:
+        # DATA_LOVELACE stays unset: the entry can only be re-set up via a
+        # restart otherwise, since card setup runs from the domain's
+        # async_setup, which an entry reload does not re-run.
         _LOGGER.exception("Could not register the Jura dashboard cards; add them as a dashboard resource instead")
+        return
+    hass.data[DATA_LOVELACE] = True
 
 
 async def _async_register_resources(hass: HomeAssistant, urls: dict[str, str]) -> bool:
@@ -127,7 +128,6 @@ async def _async_register_resources(hass: HomeAssistant, urls: dict[str, str]) -
     if not getattr(resources, "loaded", True):
         await resources.async_load()
         resources.loaded = True
-
     items = list(resources.async_items())
     for base, url in urls.items():
         ours = [item for item in items if str(item.get("url", "")).split("?", 1)[0] == base]
@@ -141,6 +141,11 @@ async def _async_register_resources(hass: HomeAssistant, urls: dict[str, str]) -
             _LOGGER.info("Updating dashboard resource to %s", url)
             await resources.async_update_item(first["id"], {"res_type": "module", "url": url})
         for item in duplicates:
+            await resources.async_delete_item(item["id"])
+    for item in items:
+        base = str(item.get("url", "")).split("?", 1)[0]
+        if base.startswith(f"{URL_BASE}/") and base not in urls:
+            _LOGGER.info("Removing stale dashboard resource %s", item.get("url"))
             await resources.async_delete_item(item["id"])
     return True
 

@@ -158,6 +158,84 @@ async def test_setup_failure_does_not_break_the_integration():
     assert "frontend_extra_js_url_es5" not in hass.data
 
 
+async def test_setup_runs_once_with_storage_resources():
+    """Idempotence must hold for the resource path too, not only the extra-JS
+    fallback: a second domain setup must not create/update resources again."""
+    hass = _hass()
+    resources = FakeResources()
+    creates, updates = [], []
+    hass.data["lovelace"] = SimpleNamespace(resource_mode="storage", resources=resources)
+
+    async def _count_create(data):
+        creates.append(data)
+        return await FakeResources.async_create_item(resources, data)
+
+    async def _count_update(item_id, data):
+        updates.append((item_id, data))
+        return await FakeResources.async_update_item(resources, item_id, data)
+
+    resources.async_create_item = _count_create
+    resources.async_update_item = _count_update
+
+    await lovelace.async_setup_lovelace(hass)
+    after_first = {item["id"]: dict(item) for item in resources.async_items()}
+    assert len(creates) == len(lovelace.CARD_FILES) and not updates
+
+    await lovelace.async_setup_lovelace(hass)
+    assert hass.http.async_register_static_paths.await_count == 1
+    assert {item["id"]: dict(item) for item in resources.async_items()} == after_first
+    assert len(creates) == len(lovelace.CARD_FILES) and not updates
+
+
+async def test_stale_jura_resources_are_pruned():
+    """A card dropped/renamed in a later release must not leave a 404ing
+    resource behind; foreign resources and current ones are kept."""
+    hass = _hass()
+    resources = FakeResources(
+        [
+            {"id": "1", "type": "module", "url": "/jura_connect/jura-old-card.js"},
+            {"id": "2", "type": "module", "url": "/jura_connect/jura-brew-card.js?v=stale"},
+            {"id": "3", "type": "module", "url": "/local/other-card.js"},
+        ],
+        loaded=True,
+    )
+    hass.data["lovelace"] = SimpleNamespace(resource_mode="storage", resources=resources)
+    await lovelace.async_setup_lovelace(hass)
+
+    assert "1" not in resources.items  # stale card deleted
+    assert "2" in resources.items and not resources.items["2"]["url"].endswith("?v=stale")
+    assert resources.items["3"]["url"] == "/local/other-card.js"  # foreign untouched
+    bases = {item["url"].split("?")[0] for item in resources.async_items()}
+    assert bases == {
+        "/jura_connect/jura-brew-card.js",
+        "/jura_connect/jura-coffee-button-card.js",
+        "/local/other-card.js",
+    }
+
+
+async def test_setup_failure_leaves_registration_retryable():
+    """A raising websocket/static registration must not escape async_setup,
+    and must not mark the domain as registered: the next setup retries."""
+    hass = _hass()
+    resources = FakeResources()
+    hass.data["lovelace"] = SimpleNamespace(resource_mode="storage", resources=resources)
+    boom = RuntimeError("boom")
+
+    def _raise(_hass, _cmd):
+        raise boom
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(lovelace.websocket_api, "async_register_command", _raise)
+    await lovelace.async_setup_lovelace(hass)  # must not raise
+    assert not hass.data.get(lovelace.DATA_LOVELACE)
+    assert not resources.items  # failed before any card work
+
+    monkey.undo()  # transient failure cleared -> retry completes
+    await lovelace.async_setup_lovelace(hass)
+    assert hass.data[lovelace.DATA_LOVELACE] is True
+    assert {item["url"].split("?")[0] for item in resources.async_items()} == set(_served(hass))
+
+
 def test_products_payload_maps_params_to_brew_service_fields():
     products = lovelace.products_payload(_PROFILE)
     assert [p["name"] for p in products] == [p.name for p in _PROFILE.products]

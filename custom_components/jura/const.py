@@ -126,6 +126,13 @@ BREW_BLOCKING_ALERTS: frozenset[str] = frozenset(
         "remove_water_tank",
         "error_status",
         "program_mode_status",
+        # profile Type="block" alerts: the library documents these as stopping
+        # every product; omitting them re-opens the ACK-but-never-dispense
+        # phantom brew for drinks involving the powder chute / covers.
+        "close_powder_cover",
+        "fill_powder",
+        "close_tab",
+        "close_front_cover",
     }
 )
 
@@ -176,6 +183,7 @@ ALERT_BINARY_SENSORS: dict[str, str | None] = {
     # XML and the 0.14.0 fallback codebook.
     "cappu_clean_alert": "problem",
     # in-progress / running
+    "switch_off_delay_active": "running",
     "heating_up": "running",
     "coffee_rinsing": "running",
     "system_filling": "running",

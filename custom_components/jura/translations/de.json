@@ -126,6 +126,9 @@
             "system_emptying": {
                 "name": "System wird geleert"
             },
+            "switch_off_delay_active": {
+                "name": "Ausschaltverzögerung aktiv"
+            },
             "please_wait": {
                 "name": "Bitte warten"
             },

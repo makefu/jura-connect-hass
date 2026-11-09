@@ -502,6 +502,15 @@ class JuraCoordinator(DataUpdateCoordinator[MachineSnapshot]):
         errors too: ``machine_unreachable`` (and the machine is marked
         OFFLINE at once), ``brew_not_started`` (no progress after the ACK),
         ``brew_failed``.
+
+        A snapshot whose handshake state is OFFLINE is *not* refused up
+        front on this service/card path: the attempt doubles as the
+        reachability probe, so a machine that woke since the last poll can
+        still brew instead of waiting for the next poll to clear OFFLINE.
+        (The Brew *button* is gated on OFFLINE; this is the deliberate
+        asymmetry between a visible press and an explicit service call.)
+        ``machine_unreachable`` plus the immediate OFFLINE marking cover
+        the genuinely-off case.
         """
         if self.brew_pending:
             raise HomeAssistantError(translation_domain=DOMAIN, translation_key="brew_in_progress")

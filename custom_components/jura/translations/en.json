@@ -198,6 +198,9 @@
             "system_emptying": {
                 "name": "System emptying"
             },
+            "switch_off_delay_active": {
+                "name": "Switch-off delay active"
+            },
             "please_wait": {
                 "name": "Please wait"
             },

@@ -113,6 +113,40 @@ async def test_successful_brew_unchanged(ready_snapshot):
     coordinator.async_request_refresh.assert_awaited_once()
 
 
+async def test_offline_snapshot_still_attempts_the_brew(ready_snapshot):
+    """The service path probes by attempting: a machine that woke since the
+    last poll must be able to brew without waiting for the next poll."""
+    coordinator = _real_brew_coordinator(
+        dataclasses.replace(ready_snapshot, handshake_state=HANDSHAKE_STATE_OFFLINE), None
+    )
+    result = await coordinator.run_brew("02000809000002000100000000000000", product="espresso")
+    assert result == {"ack": "@tp", "frames": []}
+    coordinator.backend.follow_brew.assert_awaited_once()
+
+
+async def test_offline_snapshot_brew_failure_marks_offline_immediately(ready_snapshot):
+    """The genuinely-off case: the attempt pays once, reports the machine
+    unreachable, and the snapshot flips without waiting for the polls."""
+    offline = dataclasses.replace(ready_snapshot, handshake_state=HANDSHAKE_STATE_OFFLINE)
+    coordinator = _real_brew_coordinator(offline, _unreachable())
+    with pytest.raises(HomeAssistantError) as exc:
+        await coordinator.run_brew("02000809000002000100000000000000")
+    assert exc.value.translation_key == "machine_unreachable"
+    assert coordinator.data.handshake_state == HANDSHAKE_STATE_OFFLINE
+
+
+@pytest.mark.parametrize("alert", ["close_powder_cover", "fill_powder", "close_tab", "close_front_cover"])
+def test_profile_block_alerts_stop_brewing(sample_snapshot, alert):
+    """Profile Type=\"block\" alerts stop every product; they must gate the
+    button like the other critical alerts, or the machine ACKs and never
+    dispenses."""
+    coordinator = _coordinator()
+    coordinator.data = _with_alerts(sample_snapshot, alert)
+    assert coordinator.brew_blocker() == alert
+    assert JuraBrewButton(coordinator, coordinator.config_entry).available is False
+
+
+
 # --- not ready / already brewing (machine heating up after power-on) ---------
 # Regression: the Brew button was enabled while the machine heated up. The
 # machine ACKed the recipe and never brewed; the integration followed that

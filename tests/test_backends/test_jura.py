@@ -381,6 +381,34 @@ async def test_follow_brew_stops_when_the_machine_never_starts():
         assert snapshot.handshake_state == "CORRECT"
 
 
+async def test_follow_brew_follow_window_starts_at_the_first_frame():
+    """Regression: the follow deadline used to be computed *before* the @TP:
+    ACK and the start probe, so the dispense window silently shrank by that
+    much and a slow brew got reported finished without ever seeing ENJOY."""
+    from jura_connect import load_profile
+
+    cfg = simulator.SimulatorConfig(
+        require_user_accept=False,
+        allow_brew=True,
+        brew_progress_steps=4,
+        brew_progress_interval=0.6,
+    )
+    with simulator.run_in_thread(cfg) as sim:
+        host, port = sim.address
+        backend = JuraConnectBackend(host, port, conn_id="ha-test")
+        await backend.pair()
+        recipe = load_profile("EF1091").product_by_code[0x02].build_recipe_hex({})
+
+        # First @TV: lands ~1.2 s after the request; the full stream ~3.6 s.
+        # A follow window of 2.6 s measured from the request would cut off
+        # before ENJOY; measured from the first frame it covers the brew.
+        result = await backend.follow_brew(recipe, follow_seconds=2.6, start_timeout=2.0)
+
+    frames = result["frames"]
+    assert len(frames) == 5  # 4 progress steps + ENJOY
+    assert frames[-1]["state"] == "ENJOY"
+
+
 async def test_follow_brew_hard_budget_closes_a_stuck_session(monkeypatch):
     """Last line of defence: a worker blocked past the budget gets its socket
     closed and the coordinator gets an error instead of waiting forever."""

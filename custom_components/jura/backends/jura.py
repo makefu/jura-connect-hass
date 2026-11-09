@@ -309,12 +309,15 @@ class JuraConnectBackend(JuraBackend):
                 ack = client.request(f"@TP:{recipe_hex}", match=BREW_REPLY_MATCH, timeout=self.read_timeout)
                 if ack.lower().startswith("@an:error"):
                     raise JuraBackendError(f"machine refused brew: {ack}")
-                deadline = time.monotonic() + follow_seconds
                 first = next(iter(client.iter_progress(timeout=min(start_timeout, follow_seconds))), None)
                 if first is None:
                     raise JuraBrewNotStartedError(f"no brew progress within {start_timeout:.0f}s after {ack!r}")
                 frames = [first.to_dict()]
                 if not first.is_complete:
+                    # Follow window measured from the first frame: the ACK
+                    # wait and the start probe must not eat into it, else a
+                    # slow brew is reported finished before ENJOY.
+                    deadline = time.monotonic() + follow_seconds
                     for update in client.iter_progress(until=deadline):
                         frames.append(update.to_dict())
                         if update.is_complete:

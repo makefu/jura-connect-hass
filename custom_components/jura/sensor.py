@@ -105,6 +105,8 @@ class StateSensor(JuraEntity, SensorEntity):
         snapshot = _snapshot(self.coordinator)
         # "Can a drink be started now?" for dashboards: machine-wide plus the
         # products the machine blocks right now (cards check their drink).
+        # While OFFLINE the snapshot is retained data: blocked_products would
+        # be a stale claim, so only the reachability-derived flags are shown.
         coordinator = self.coordinator
         online = snapshot is not None and snapshot.handshake_state != HANDSHAKE_STATE_OFFLINE
         blocker = coordinator.brew_blocker() if online else None
@@ -112,7 +114,10 @@ class StateSensor(JuraEntity, SensorEntity):
             "brew_ready": bool(online and blocker is None and not coordinator.brew_pending),
             "brew_blocker": blocker,
             "brewing": bool(coordinator.brew_pending),
-            "blocked_products": list(snapshot.blocked_products) if snapshot is not None else [],
+            "blocked_products": list(snapshot.blocked_products) if online else [],
+            # The alerts behind blocked_products, so automations get the
+            # reason without duplicating the cards' translation table.
+            "blocking_alerts": list(snapshot.blocking_alerts) if online else [],
         }
         if snapshot is None:
             return {**health, **brew}

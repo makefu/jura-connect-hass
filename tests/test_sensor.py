@@ -48,7 +48,9 @@ def test_state_sensor_idle_when_no_alerts(empty_snapshot, fake_config_entry):
 
 
 def test_state_sensor_none_without_data(fake_config_entry):
-    sensor = StateSensor(_make_coordinator(None), fake_config_entry)
+    coordinator = _make_coordinator(None)
+    coordinator.brew_pending = False
+    sensor = StateSensor(coordinator, fake_config_entry)
     assert sensor.native_value is None
     # Poll-health keys stay present even without a snapshot; the MagicMock
     # coordinator's own attributes ride through unchanged.
@@ -60,11 +62,14 @@ def test_state_sensor_none_without_data(fake_config_entry):
         "brew_blocker",
         "brewing",
         "blocked_products",
+        "blocking_alerts",
     }
     assert attrs["last_poll_success"] is sensor.coordinator.last_poll_success
-    # No snapshot: nothing can be brewed.
+    # No snapshot: nothing can be brewed, and nothing is brewing.
     assert attrs["brew_ready"] is False
+    assert attrs["brewing"] is False
     assert attrs["blocked_products"] == []
+    assert attrs["blocking_alerts"] == []
 
 
 def test_state_sensor_attributes_include_snapshot(sample_snapshot, fake_config_entry):

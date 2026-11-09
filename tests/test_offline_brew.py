@@ -348,9 +348,15 @@ def test_status_sensor_reports_brew_readiness(ready_snapshot):
     attrs = sensor.extra_state_attributes
     assert attrs["brew_ready"] is True  # machine-wide
     assert attrs["blocked_products"] == ["cappuccino", "latte_macchiato"]
+    assert attrs["blocking_alerts"] == ["cappu_clean_alert"]
 
     coordinator.data = dataclasses.replace(ready_snapshot, handshake_state=HANDSHAKE_STATE_OFFLINE)
-    assert sensor.extra_state_attributes["brew_ready"] is False
+    attrs = sensor.extra_state_attributes
+    assert attrs["brew_ready"] is False
+    # A retained OFFLINE snapshot must not claim the machine still blocks
+    # those drinks -- it is stale data.
+    assert attrs["blocked_products"] == []
+    assert attrs["blocking_alerts"] == []
 
     coordinator.data = ready_snapshot
     coordinator.brew_pending = True
